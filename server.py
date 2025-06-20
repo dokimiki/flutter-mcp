@@ -373,15 +373,195 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
+async def process_flutter_mentions(text: str) -> Dict[str, Any]:
+    """
+    Parse text for @flutter_mcp mentions and return relevant documentation.
+    
+    Supports patterns like:
+    - @flutter_mcp provider (pub.dev package)
+    - @flutter_mcp material.AppBar (Flutter class)
+    - @flutter_mcp dart:async.Future (Dart API)
+    - @flutter_mcp Container (widget)
+    
+    Args:
+        text: Text containing @flutter_mcp mentions
+    
+    Returns:
+        Dictionary with parsed mentions and their documentation
+    """
+    bind_contextvars(tool="process_flutter_mentions", text_length=len(text))
+    
+    # Pattern to match @flutter_mcp mentions
+    pattern = r'@flutter_mcp\s+([a-zA-Z0-9_.:]+)'
+    mentions = re.findall(pattern, text)
+    
+    if not mentions:
+        return {
+            "mentions_found": 0,
+            "message": "No @flutter_mcp mentions found in text",
+            "results": []
+        }
+    
+    logger.info("mentions_found", count=len(mentions))
+    results = []
+    
+    for mention in mentions:
+        logger.info("processing_mention", mention=mention)
+        
+        # Determine the type of mention
+        if ':' in mention:
+            # Dart API pattern (e.g., dart:async.Future)
+            result = await search_flutter_docs(mention)
+            if result.get("results"):
+                results.append({
+                    "mention": mention,
+                    "type": "dart_api",
+                    "documentation": result["results"][0]
+                })
+            else:
+                results.append({
+                    "mention": mention,
+                    "type": "dart_api",
+                    "error": "Documentation not found"
+                })
+                
+        elif '.' in mention:
+            # Flutter library.class pattern (e.g., material.AppBar)
+            parts = mention.split('.')
+            if len(parts) == 2:
+                library, class_name = parts
+                if library in ["material", "widgets", "cupertino"]:
+                    # Flutter class
+                    doc = await get_flutter_docs(class_name, library)
+                    results.append({
+                        "mention": mention,
+                        "type": "flutter_class",
+                        "documentation": doc
+                    })
+                else:
+                    # Try as general search
+                    result = await search_flutter_docs(mention)
+                    if result.get("results"):
+                        results.append({
+                            "mention": mention,
+                            "type": "flutter_search",
+                            "documentation": result["results"][0]
+                        })
+                    else:
+                        results.append({
+                            "mention": mention,
+                            "type": "unknown",
+                            "error": "Documentation not found"
+                        })
+            else:
+                # Invalid format
+                results.append({
+                    "mention": mention,
+                    "type": "invalid",
+                    "error": "Invalid format for library.class pattern"
+                })
+                
+        else:
+            # Single word - could be package or widget
+            # First try as pub.dev package
+            package_info = await get_pub_package_info(mention)
+            
+            if "error" not in package_info:
+                results.append({
+                    "mention": mention,
+                    "type": "pub_package",
+                    "documentation": package_info
+                })
+            else:
+                # Try as Flutter widget/class
+                search_result = await search_flutter_docs(mention)
+                if search_result.get("results"):
+                    results.append({
+                        "mention": mention,
+                        "type": "flutter_widget",
+                        "documentation": search_result["results"][0]
+                    })
+                else:
+                    results.append({
+                        "mention": mention,
+                        "type": "not_found",
+                        "error": f"No documentation found for '{mention}' as package or Flutter class"
+                    })
+    
+    # Format results for AI context injection
+    formatted_results = []
+    for result in results:
+        if "error" in result:
+            formatted_results.append({
+                "mention": result["mention"],
+                "type": result["type"],
+                "error": result["error"]
+            })
+        else:
+            doc = result["documentation"]
+            if result["type"] == "pub_package":
+                # Format package info
+                formatted_results.append({
+                    "mention": result["mention"],
+                    "type": "pub_package",
+                    "name": doc["name"],
+                    "version": doc["version"],
+                    "description": doc["description"],
+                    "documentation_url": doc["documentation"],
+                    "dependencies": doc.get("dependencies", []),
+                    "likes": doc.get("likes", 0),
+                    "pub_points": doc.get("pub_points", 0)
+                })
+            else:
+                # Format Flutter/Dart documentation
+                formatted_results.append({
+                    "mention": result["mention"],
+                    "type": result["type"],
+                    "class": doc.get("class", ""),
+                    "library": doc.get("library", ""),
+                    "content": doc.get("content", ""),
+                    "source": doc.get("source", "live")
+                })
+    
+    return {
+        "mentions_found": len(mentions),
+        "unique_mentions": len(set(mentions)),
+        "results": formatted_results,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+def clean_readme_markdown(readme_content: str) -> str:
+    """Clean and format README markdown for AI consumption"""
+    if not readme_content:
+        return "No README available"
+    
+    # Remove HTML comments
+    readme_content = re.sub(r'<!--.*?-->', '', readme_content, flags=re.DOTALL)
+    
+    # Remove excessive blank lines
+    readme_content = re.sub(r'\n{3,}', '\n\n', readme_content)
+    
+    # Remove badges/shields (common in READMEs but not useful for AI)
+    readme_content = re.sub(r'!\[.*?\]\(.*?shields\.io.*?\)', '', readme_content)
+    readme_content = re.sub(r'!\[.*?\]\(.*?badge.*?\)', '', readme_content)
+    
+    # Clean up any remaining formatting issues
+    readme_content = readme_content.strip()
+    
+    return readme_content
+
+
+@mcp.tool()
 async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
     """
-    Get package information from pub.dev.
+    Get package information from pub.dev including README content.
     
     Args:
         package_name: Name of the pub.dev package (e.g., "provider", "bloc", "dio")
     
     Returns:
-        Package information including version, description, and metadata
+        Package information including version, description, metadata, and README
     """
     bind_contextvars(tool="get_pub_package_info", package=package_name)
     
@@ -397,13 +577,22 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("cache_read_error", error=str(e))
     
+    # Rate limit before fetching
+    await rate_limiter.acquire()
+    
     # Fetch from pub.dev API
     url = f"https://pub.dev/api/packages/{package_name}"
     logger.info("fetching_package", url=url)
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url)
+            # Fetch package info
+            response = await client.get(
+                url,
+                headers={
+                    "User-Agent": "Flutter-MCP-Docs/1.0 (github.com/flutter-mcp/flutter-mcp)"
+                }
+            )
             response.raise_for_status()
             
             data = response.json()
@@ -411,11 +600,12 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
             # Extract relevant information
             latest = data.get("latest", {})
             pubspec = latest.get("pubspec", {})
+            version = latest.get("version", "unknown")
             
             result = {
                 "source": "live",
                 "name": package_name,
-                "version": latest.get("version", "unknown"),
+                "version": version,
                 "description": pubspec.get("description", "No description available"),
                 "homepage": pubspec.get("homepage", ""),
                 "repository": pubspec.get("repository", ""),
@@ -431,6 +621,84 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
                 "popularity": data.get("popularityScore", 0)
             }
             
+            # Fetch README content from package page
+            readme_url = f"https://pub.dev/packages/{package_name}"
+            logger.info("fetching_readme", url=readme_url)
+            
+            try:
+                # Rate limit before second request
+                await rate_limiter.acquire()
+                
+                readme_response = await client.get(
+                    readme_url,
+                    headers={
+                        "User-Agent": "Flutter-MCP-Docs/1.0 (github.com/flutter-mcp/flutter-mcp)"
+                    }
+                )
+                readme_response.raise_for_status()
+                
+                # Parse page HTML to extract README
+                soup = BeautifulSoup(readme_response.text, 'html.parser')
+                
+                # Find the README content - pub.dev uses a section with specific classes
+                readme_div = soup.find('section', class_='detail-tab-readme-content')
+                if not readme_div:
+                    # Try finding any section with markdown-body class
+                    readme_div = soup.find('section', class_='markdown-body')
+                    if not readme_div:
+                        # Try finding div with markdown-body
+                        readme_div = soup.find('div', class_='markdown-body')
+                
+                if readme_div:
+                    # Extract text content and preserve basic markdown structure
+                    # Convert common HTML elements back to markdown
+                    for br in readme_div.find_all('br'):
+                        br.replace_with('\n')
+                    
+                    for p in readme_div.find_all('p'):
+                        p.insert_after('\n\n')
+                    
+                    for h1 in readme_div.find_all('h1'):
+                        h1.insert_before('# ')
+                        h1.insert_after('\n\n')
+                    
+                    for h2 in readme_div.find_all('h2'):
+                        h2.insert_before('## ')
+                        h2.insert_after('\n\n')
+                    
+                    for h3 in readme_div.find_all('h3'):
+                        h3.insert_before('### ')
+                        h3.insert_after('\n\n')
+                    
+                    for code in readme_div.find_all('code'):
+                        if code.parent.name != 'pre':
+                            code.insert_before('`')
+                            code.insert_after('`')
+                    
+                    for pre in readme_div.find_all('pre'):
+                        code_block = pre.find('code')
+                        if code_block:
+                            lang_class = code_block.get('class', [])
+                            lang = ''
+                            for cls in lang_class if isinstance(lang_class, list) else [lang_class]:
+                                if cls and cls.startswith('language-'):
+                                    lang = cls.replace('language-', '')
+                                    break
+                            pre.insert_before(f'\n```{lang}\n')
+                            pre.insert_after('\n```\n')
+                    
+                    readme_text = readme_div.get_text()
+                    result["readme"] = clean_readme_markdown(readme_text)
+                else:
+                    result["readme"] = "README parsing failed - content structure not recognized"
+                    
+            except httpx.HTTPStatusError as e:
+                logger.warning("readme_fetch_failed", status_code=e.response.status_code)
+                result["readme"] = f"README not available (HTTP {e.response.status_code})"
+            except Exception as e:
+                logger.warning("readme_fetch_error", error=str(e))
+                result["readme"] = f"Failed to fetch README: {str(e)}"
+            
             # Cache for 12 hours
             if redis_client:
                 try:
@@ -442,7 +710,7 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
                 except Exception as e:
                     logger.warning("cache_write_error", error=str(e))
             
-            logger.info("package_fetched_success")
+            logger.info("package_fetched_success", has_readme="readme" in result)
             return result
             
     except httpx.HTTPStatusError as e:
