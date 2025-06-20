@@ -28,8 +28,8 @@ T026,Marketing & Launch,Create comparison table,Medium,TODO,Claude,Flutter MCP v
 T027,Marketing & Launch,Reach out to Flutter influencers,Medium,TODO,You,Contact Flutter YouTubers / bloggers for early access,,2 hours
 T028,Community Engagement,Implement live request fulfillment,High,TODO,You,Monitor launch thread and add requested packages in real-time,T007,4 hours
 T029,Testing & QA,Load testing with concurrent requests,Medium,TODO,You,Ensure Redis and rate limiting work under load,T010,2 hours
-T030,Documentation,Create API documentation,Medium,TODO,Claude,Document all MCP tools and their parameters,T012,1 hour
-T031,Core Development,Error handling and fallbacks,High,TODO,Claude,Graceful handling when docs not found / network issues,T006/T007,2 hours
+T030,Documentation,Create API documentation,Medium,DONE,Claude,Document all MCP tools and their parameters,T012,1 hour
+T031,Core Development,Error handling and fallbacks,High,DONE,Claude,Graceful handling when docs not found / network issues,T006/T007,2 hours
 T032,Marketing & Launch,SEO optimize GitHub repository,Low,TODO,Claude,Keywords: Flutter MCP / Claude Flutter / Cursor Flutter / AI Flutter docs,,30 min
 T033,Community Engagement,Create feedback collection system,Medium,TODO,You + Claude,GitHub discussions / feedback form / analytics,T017,1 hour
 T034,Advanced Features,Null safety awareness,Medium,TODO,Claude,Tag content with null-safety status where applicable,T004,3 hours
