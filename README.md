@@ -1,14 +1,31 @@
 # Flutter MCP: Give Your AI Real-Time Flutter Superpowers 🚀
 
-Stop fighting with hallucinated widgets and deprecated APIs. Flutter MCP connects your AI assistant to real-time documentation for any pub.dev package, ensuring the Flutter code it generates actually works.
+**A real-time MCP server providing Flutter/Dart documentation and pub.dev package info to AI assistants — supports ALL 50,000+ packages on demand.**
+
+Stop fighting with hallucinated widgets and deprecated APIs. Flutter MCP connects your AI assistant to real-time documentation, ensuring the Flutter code it generates actually works.
 
 <p align="center">
-  <a href="#-get-started-in-60-seconds">Quick Start</a> •
-  <a href="#-how-it-works">How it Works</a> •
-  <a href="#-usage">Usage</a> •
+  <img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter">
+  <img src="https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white" alt="Dart">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/MCP-Protocol-green?style=for-the-badge" alt="MCP">
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-demo">Demo</a> •
   <a href="#-features">Features</a> •
+  <a href="#-how-it-works">How it Works</a> •
   <a href="#-contributing">Contributing</a>
 </p>
+
+## 🎬 Demo
+
+<p align="center">
+  <img src="https://github.com/flutter-mcp/flutter-mcp/assets/demo.gif" alt="Flutter MCP Demo" width="800">
+</p>
+
+**See it in action**: From `flutter-mcp start` to getting real-time Flutter documentation in 20 seconds.
 
 ## The Problem: Your AI is Stuck in 2021
 
@@ -54,15 +71,37 @@ final userProvider = FutureProvider.autoDispose
 </tr>
 </table>
 
-## 🚀 Get Started in 2 Minutes
+## 🚀 Quick Start
+
+### Option 1: Install from PyPI (Recommended)
+
+```bash
+# Install the package
+pip install flutter-mcp-server
+
+# Start the server
+flutter-mcp start
+```
+
+That's it! The server is now running and ready to connect to your AI assistant.
+
+### Option 2: Run with Docker
+
+```bash
+# Using Docker Compose (includes Redis)
+docker-compose up
+
+# Or standalone Docker
+docker run -p 8000:8000 ghcr.io/flutter-mcp/flutter-mcp:latest
+```
 
 ### Prerequisites
 
-- Python 3.10+
-- Redis (for caching) - [Install Redis](https://redis.io/docs/install/)
+- **Python 3.10+** (for pip install)
+- **Redis** (optional but recommended for caching)
 
 <details>
-<summary>Quick Redis Install</summary>
+<summary>📦 Quick Redis Install</summary>
 
 ```bash
 # macOS
@@ -71,21 +110,16 @@ brew install redis && brew services start redis
 # Ubuntu/Debian  
 sudo apt-get install redis-server
 
-# Docker (easiest)
-docker run -d -p 6379:6379 --name flutter-mcp-redis redis:alpine
+# Windows (WSL)
+sudo apt-get install redis-server
+
+# Docker (easiest - no install needed)
+docker run -d -p 6379:6379 --name redis redis:alpine
 ```
+
+**Note**: The server works without Redis but responses will be slower (no caching).
 
 </details>
-
-### 1. Install Flutter MCP
-
-```bash
-# Using pipx (recommended)
-pipx install flutter-mcp
-
-# Or using pip
-pip install flutter-mcp
-```
 
 ### 2. Add to Your AI Assistant
 
@@ -169,7 +203,7 @@ Note: When configured in Claude Desktop, the server starts automatically.
 
 </details>
 
-### 4. Use It!
+### 3. Use It!
 
 Mention any Flutter/Dart package in your prompts, and Flutter MCP will automatically provide real-time documentation:
 
@@ -183,6 +217,69 @@ Mention any Flutter/Dart package in your prompts, and Flutter MCP will automatic
 ```
 "Explain @flutter_mcp freezed code generation"
 "Show me all @flutter_mcp get_it service locator patterns"
+```
+
+## 📚 Available Tools
+
+Flutter MCP provides 5 powerful tools for AI assistants:
+
+### 1. `get_flutter_docs`
+Fetches official Flutter/Dart API documentation.
+
+```json
+{
+  "tool": "get_flutter_docs",
+  "arguments": {
+    "class_name": "Container",
+    "library": "widgets"
+  }
+}
+```
+
+### 2. `get_pub_package_info`
+Gets complete package information including README from pub.dev.
+
+```json
+{
+  "tool": "get_pub_package_info",
+  "arguments": {
+    "package_name": "provider"
+  }
+}
+```
+
+### 3. `search_flutter_docs`
+Intelligently searches across Flutter/Dart documentation.
+
+```json
+{
+  "tool": "search_flutter_docs",
+  "arguments": {
+    "query": "material.AppBar"
+  }
+}
+```
+
+### 4. `process_flutter_mentions`
+Processes `@flutter_mcp` mentions in text for context injection.
+
+```json
+{
+  "tool": "process_flutter_mentions",
+  "arguments": {
+    "text": "I need help with @flutter_mcp riverpod state management"
+  }
+}
+```
+
+### 5. `health_check`
+Monitors the health of all scrapers and services.
+
+```json
+{
+  "tool": "health_check",
+  "arguments": {}
+}
 ```
 
 ## 🎯 Features

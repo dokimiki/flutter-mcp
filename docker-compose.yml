@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  flutter-mcp:
+    build: .
+    container_name: flutter-mcp-server
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - redis
+    volumes:
+      # Mount source code for development
+      - ./server.py:/app/server.py:ro
+      - ./cli.py:/app/cli.py:ro
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: flutter-mcp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
