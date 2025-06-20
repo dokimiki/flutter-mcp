@@ -1,11 +1,11 @@
 Task ID,Category,Task Description,Priority,Status,Who Does This,Implementation Notes,Dependencies,Estimated Time
-T001,Core Development,Set up FastMCP Python project structure,Critical,TODO,Claude,Use uv package manager with mcp[cli] httpx redis beautifulsoup4 structlog,,1 hour
-T002,Core Development,Implement Redis connection and caching layer,Critical,TODO,Claude,Configure TTLs: 24h for API docs / 12h for packages / 7d for cookbook examples,T001,2 hours
-T003,Core Development,Create rate limiter class (2 req/sec),Critical,TODO,Claude,Use asyncio Semaphore pattern from initial-vision.md,T001,1 hour
-T004,Documentation Processing,Build HTML to Markdown converter,Critical,TODO,Claude,Extract: description / constructors / properties / methods / code examples,T001,4 hours
-T005,Documentation Processing,Implement smart URL resolver,Critical,TODO,Claude,Pattern matching for widgets/material/cupertino/dart:core libraries,T004,2 hours
-T006,API & Integration,Create get_flutter_docs tool,Critical,TODO,Claude,On-demand fetching with cache check first,T002/T003/T004,3 hours
-T007,API & Integration,Create get_pub_package_docs tool,Critical,TODO,Claude,Use official pub.dev API - format package info nicely,T002/T003,2 hours
+T001,Core Development,Set up FastMCP Python project structure,Critical,DONE,Claude,Use uv package manager with mcp[cli] httpx redis beautifulsoup4 structlog,,1 hour
+T002,Core Development,Implement Redis connection and caching layer,Critical,DONE,Claude,Configure TTLs: 24h for API docs / 12h for packages / 7d for cookbook examples,T001,2 hours
+T003,Core Development,Create rate limiter class (2 req/sec),Critical,DONE,Claude,Use asyncio Semaphore pattern from initial-vision.md,T001,1 hour
+T004,Documentation Processing,Build HTML to Markdown converter,Critical,DONE,Claude,Extract: description / constructors / properties / methods / code examples,T001,4 hours
+T005,Documentation Processing,Implement smart URL resolver,Critical,DONE,Claude,Pattern matching for widgets/material/cupertino/dart:core libraries,T004,2 hours
+T006,API & Integration,Create get_flutter_docs tool,Critical,DONE,Claude,On-demand fetching with cache check first,T002/T003/T004,3 hours
+T007,API & Integration,Create get_pub_package_docs tool,Critical,IN_PROGRESS,Claude,Use official pub.dev API - format package info nicely,T002/T003,2 hours
 T008,API & Integration,Implement @flutter_mcp activation parser,Critical,TODO,Claude,Parse mentions from prompts to trigger package-specific context,T006/T007,2 hours
 T009,Core Development,Add structured logging with structlog,High,TODO,Claude,Log: cache hits/misses / fetch times / errors / query patterns,T001,1 hour
 T010,Testing & QA,Test with popular packages,Critical,TODO,You + Claude,Test: provider / bloc / get_it / dio / http / freezed,T006/T007,2 hours

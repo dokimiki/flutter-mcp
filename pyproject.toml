@@ -1,0 +1,17 @@
+[project]
+name = "mcp-server-flutter-docs"
+version = "0.1.0"
+description = "MCP server providing real-time Flutter/Dart documentation to AI assistants"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "beautifulsoup4>=4.13.4",
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.9.4",
+    "redis>=6.2.0",
+    "structlog>=25.4.0",
+]
+
+[project.scripts]
+flutter-mcp = "server:main"
