@@ -726,6 +726,144 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
         }
 
 
+@mcp.tool()
+async def health_check() -> Dict[str, Any]:
+    """
+    Check the health status of all scrapers and services.
+    
+    Returns:
+        Health status including individual scraper checks and overall status
+    """
+    checks = {}
+    overall_status = "ok"
+    timestamp = datetime.utcnow().isoformat()
+    
+    # Check Flutter docs scraper
+    flutter_start = time.time()
+    try:
+        # Test with Container widget - a stable, core widget unlikely to be removed
+        result = await get_flutter_docs("Container", "widgets")
+        flutter_duration = int((time.time() - flutter_start) * 1000)
+        
+        if "error" in result:
+            checks["flutter_docs"] = {
+                "status": "failed",
+                "target": "Container widget",
+                "duration_ms": flutter_duration,
+                "error": result["error"]
+            }
+            overall_status = "degraded"
+        else:
+            checks["flutter_docs"] = {
+                "status": "ok",
+                "target": "Container widget",
+                "duration_ms": flutter_duration,
+                "cached": result.get("source") == "cache"
+            }
+    except Exception as e:
+        flutter_duration = int((time.time() - flutter_start) * 1000)
+        checks["flutter_docs"] = {
+            "status": "failed",
+            "target": "Container widget",
+            "duration_ms": flutter_duration,
+            "error": str(e)
+        }
+        overall_status = "failed"
+    
+    # Check pub.dev scraper
+    pub_start = time.time()
+    try:
+        # Test with provider package - extremely popular, unlikely to be removed
+        result = await get_pub_package_info("provider")
+        pub_duration = int((time.time() - pub_start) * 1000)
+        
+        if "error" in result:
+            checks["pub_dev"] = {
+                "status": "failed",
+                "target": "provider package",
+                "duration_ms": pub_duration,
+                "error": result["error"]
+            }
+            overall_status = "degraded" if overall_status == "ok" else overall_status
+        else:
+            # Additional validation - check if we got expected fields
+            has_version = "version" in result and result["version"] != "unknown"
+            has_readme = "readme" in result and len(result.get("readme", "")) > 100
+            
+            if not has_version:
+                checks["pub_dev"] = {
+                    "status": "degraded",
+                    "target": "provider package",
+                    "duration_ms": pub_duration,
+                    "error": "Could not parse version information",
+                    "cached": result.get("source") == "cache"
+                }
+                overall_status = "degraded" if overall_status == "ok" else overall_status
+            elif not has_readme:
+                checks["pub_dev"] = {
+                    "status": "degraded",
+                    "target": "provider package",
+                    "duration_ms": pub_duration,
+                    "error": "Could not parse README content",
+                    "cached": result.get("source") == "cache"
+                }
+                overall_status = "degraded" if overall_status == "ok" else overall_status
+            else:
+                checks["pub_dev"] = {
+                    "status": "ok",
+                    "target": "provider package",
+                    "duration_ms": pub_duration,
+                    "version": result["version"],
+                    "cached": result.get("source") == "cache"
+                }
+    except Exception as e:
+        pub_duration = int((time.time() - pub_start) * 1000)
+        checks["pub_dev"] = {
+            "status": "failed",
+            "target": "provider package",
+            "duration_ms": pub_duration,
+            "error": str(e)
+        }
+        overall_status = "failed" if overall_status == "failed" else "degraded"
+    
+    # Check Redis connection
+    if redis_client:
+        try:
+            redis_client.ping()
+            checks["redis"] = {
+                "status": "ok",
+                "message": "Redis connection healthy"
+            }
+        except Exception as e:
+            checks["redis"] = {
+                "status": "degraded",
+                "message": "Redis not available - running without cache",
+                "error": str(e)
+            }
+    else:
+        checks["redis"] = {
+            "status": "degraded",
+            "message": "Redis not configured - running without cache"
+        }
+    
+    return {
+        "status": overall_status,
+        "timestamp": timestamp,
+        "checks": checks,
+        "message": get_health_message(overall_status)
+    }
+
+
+def get_health_message(status: str) -> str:
+    """Get a human-readable message for the health status"""
+    messages = {
+        "ok": "All systems operational",
+        "degraded": "Service degraded - some features may be slow or unavailable",
+        "failed": "Service failed - critical components are not working"
+    }
+    return messages.get(status, "Unknown status")
+
+
 def main():
     """Main entry point for the Flutter MCP server"""
     logger.info("flutter_mcp_starting", version="0.1.0")

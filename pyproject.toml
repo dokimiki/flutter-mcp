@@ -1,17 +1,36 @@
 [project]
-name = "mcp-server-flutter-docs"
+name = "flutter-mcp-server"
 version = "0.1.0"
 description = "MCP server providing real-time Flutter/Dart documentation to AI assistants"
 readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Flutter MCP Contributors"}]
+keywords = ["flutter", "dart", "mcp", "ai", "documentation", "pubdev"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 requires-python = ">=3.10"
 dependencies = [
     "aiofiles>=24.1.0",
     "beautifulsoup4>=4.13.4",
     "httpx>=0.28.1",
-    "mcp[cli]>=1.9.4",
+    "mcp @ git+https://github.com/modelcontextprotocol/python-sdk.git@main",
     "redis>=6.2.0",
     "structlog>=25.4.0",
 ]
 
+[project.urls]
+"Homepage" = "https://github.com/flutter-mcp/flutter-mcp"
+"Bug Reports" = "https://github.com/flutter-mcp/flutter-mcp/issues"
+"Source" = "https://github.com/flutter-mcp/flutter-mcp"
+
 [project.scripts]
-flutter-mcp = "server:main"
+flutter-mcp = "cli:main"
