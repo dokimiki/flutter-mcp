@@ -39,11 +39,11 @@ echo "========================="
 
 # Run with MCP Inspector
 if command -v uv &> /dev/null; then
-    uv run mcp dev server.py
+    uv run mcp dev src/flutter_mcp/server.py
 else
     echo "❌ uv not found. Please install uv first:"
     echo "   curl -LsSf https://astral.sh/uv/install.sh | sh"
     echo ""
     echo "Or run directly with Python:"
-    echo "   python server.py"
+    echo "   python -m src.flutter_mcp.server"
 fi

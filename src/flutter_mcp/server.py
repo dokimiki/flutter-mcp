@@ -10,7 +10,7 @@ import time
 
 from mcp.server.fastmcp import FastMCP
 import httpx
-import redis
+# Redis removed - using SQLite cache instead
 from bs4 import BeautifulSoup
 import structlog
 from structlog.contextvars import bind_contextvars
@@ -29,19 +29,12 @@ logger = structlog.get_logger()
 # Initialize FastMCP server
 mcp = FastMCP("Flutter Docs Server")
 
-# Redis client for caching (Context7-style)
-try:
-    redis_client = redis.Redis(
-        host='localhost', 
-        port=6379, 
-        decode_responses=True,
-        socket_connect_timeout=5
-    )
-    redis_client.ping()
-    logger.info("redis_connected", host="localhost", port=6379)
-except Exception as e:
-    logger.warning("redis_connection_failed", error=str(e))
-    redis_client = None
+# Import our SQLite-based cache
+from .cache import get_cache
+
+# Initialize cache manager
+cache_manager = get_cache()
+logger.info("cache_initialized", cache_type="sqlite", path=cache_manager.db_path)
 
 
 class RateLimiter:
@@ -246,20 +239,11 @@ async def get_flutter_docs(
     # Check cache first
     cache_key = get_cache_key("flutter_api", f"{library}:{class_name}")
     
-    if redis_client:
-        try:
-            cached = redis_client.get(cache_key)
-            if cached:
-                logger.info("cache_hit")
-                return {
-                    "source": "cache",
-                    "class": class_name,
-                    "library": library,
-                    "content": cached,
-                    "cached_at": redis_client.ttl(cache_key)
-                }
-        except Exception as e:
-            logger.warning("cache_read_error", error=str(e))
+    # Check cache
+    cached_data = cache_manager.get(cache_key)
+    if cached_data:
+        logger.info("cache_hit")
+        return cached_data
     
     # Rate-limited fetch from Flutter docs
     await rate_limiter.acquire()
@@ -280,26 +264,18 @@ async def get_flutter_docs(
             # Process HTML - Context7 style pipeline
             content = await process_documentation(response.text, class_name)
             
-            # Cache for 24 hours
-            if redis_client:
-                try:
-                    redis_client.setex(
-                        cache_key, 
-                        CACHE_DURATIONS["flutter_api"], 
-                        content
-                    )
-                except Exception as e:
-                    logger.warning("cache_write_error", error=str(e))
-            
-            logger.info("docs_fetched_success", content_length=len(content))
-            
-            return {
+            # Cache the result
+            result = {
                 "source": "live",
                 "class": class_name,
                 "library": library,
                 "content": content,
                 "fetched_at": datetime.utcnow().isoformat()
             }
+            cache_manager.set(cache_key, result, CACHE_DURATIONS["flutter_api"])
+            
+            logger.info("docs_fetched_success", content_length=len(content))
+            return result
             
     except httpx.HTTPStatusError as e:
         logger.error("http_error", status_code=e.response.status_code)
@@ -568,14 +544,11 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
     # Check cache first
     cache_key = get_cache_key("pub_package", package_name)
     
-    if redis_client:
-        try:
-            cached = redis_client.get(cache_key)
-            if cached:
-                logger.info("cache_hit")
-                return json.loads(cached)
-        except Exception as e:
-            logger.warning("cache_read_error", error=str(e))
+    # Check cache
+    cached_data = cache_manager.get(cache_key)
+    if cached_data:
+        logger.info("cache_hit")
+        return cached_data
     
     # Rate limit before fetching
     await rate_limiter.acquire()
@@ -700,15 +673,7 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
                 result["readme"] = f"Failed to fetch README: {str(e)}"
             
             # Cache for 12 hours
-            if redis_client:
-                try:
-                    redis_client.setex(
-                        cache_key,
-                        CACHE_DURATIONS["pub_package"],
-                        json.dumps(result)
-                    )
-                except Exception as e:
-                    logger.warning("cache_write_error", error=str(e))
+            cache_manager.set(cache_key, result, CACHE_DURATIONS["pub_package"])
             
             logger.info("package_fetched_success", has_readme="readme" in result)
             return result
@@ -826,25 +791,21 @@ async def health_check() -> Dict[str, Any]:
         }
         overall_status = "failed" if overall_status == "failed" else "degraded"
     
-    # Check Redis connection
-    if redis_client:
-        try:
-            redis_client.ping()
-            checks["redis"] = {
-                "status": "ok",
-                "message": "Redis connection healthy"
-            }
-        except Exception as e:
-            checks["redis"] = {
-                "status": "degraded",
-                "message": "Redis not available - running without cache",
-                "error": str(e)
-            }
-    else:
-        checks["redis"] = {
-            "status": "degraded",
-            "message": "Redis not configured - running without cache"
+    # Check cache status
+    try:
+        cache_stats = cache_manager.get_stats()
+        checks["cache"] = {
+            "status": "ok",
+            "message": "SQLite cache operational",
+            "stats": cache_stats
         }
+    except Exception as e:
+        checks["cache"] = {
+            "status": "degraded",
+            "message": "Cache error",
+            "error": str(e)
+        }
+        overall_status = "degraded"
     
     return {
         "status": overall_status,
@@ -868,10 +829,12 @@ def main():
     """Main entry point for the Flutter MCP server"""
     logger.info("flutter_mcp_starting", version="0.1.0")
     
-    # Test Redis connection
-    if not redis_client:
-        logger.warning("running_without_cache", 
-                      message="Redis not available. Running without cache - responses will be slower.")
+    # Initialize cache
+    try:
+        cache_stats = cache_manager.get_stats()
+        logger.info("cache_ready", stats=cache_stats)
+    except Exception as e:
+        logger.warning("cache_initialization_warning", error=str(e))
     
     # Run the MCP server
     mcp.run()

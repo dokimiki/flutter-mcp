@@ -5,7 +5,7 @@ Please use pip install with pyproject.toml for modern installations."""
 from setuptools import setup, find_packages
 
 # Read long description from README
-with open("README.md", "r", encoding="utf-8") as fh:
+with open("docs/README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
@@ -16,7 +16,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/flutter-mcp/flutter-mcp",
-    py_modules=["server", "cli"],
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -33,12 +34,12 @@ setup(
         "beautifulsoup4>=4.13.4",
         "httpx>=0.28.1",
         "mcp @ git+https://github.com/modelcontextprotocol/python-sdk.git@main",
-        "redis>=6.2.0",
+        "platformdirs>=4.0.0",
         "structlog>=25.4.0",
     ],
     entry_points={
         "console_scripts": [
-            "flutter-mcp=cli:main",
+            "flutter-mcp=flutter_mcp.cli:main",
         ],
     },
 )

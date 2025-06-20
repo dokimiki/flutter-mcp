@@ -1,52 +1,47 @@
-# Git
-.git
-.gitignore
-
 # Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
-.venv
+.Python
+.venv/
 venv/
+ENV/
 env/
-pip-log.txt
-pip-delete-this-directory.txt
+
+# Testing
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
-*.egg-info/
-.eggs/
-dist/
-build/
+.nox/
+
+# Git
+.git/
+.gitignore
+
+# Documentation (except needed files)
+docs/planning/
 
 # Development
-.vscode/
-.idea/
+.env
+.env.local
+*.log
 *.swp
-*.swo
 .DS_Store
 
-# Testing
-test_*.py
-debug_*.py
-*.log
+# IDE
+.vscode/
+.idea/
+*.sublime-*
 
-# Documentation (except essential ones)
-*.md
-!README.md
-!LICENSE
-
-# Scripts
-*.sh
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
 
 # Cache
-.uv/
-dump.rdb
-redis-data/
-
-# MCP
-mcp-inspector-data/
+.cache/
+.mypy_cache/
+.ruff_cache/

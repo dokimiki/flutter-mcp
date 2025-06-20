@@ -3,7 +3,13 @@
 
 import asyncio
 import json
-from server import get_flutter_docs, search_flutter_docs, get_pub_package_info, process_flutter_mentions
+import sys
+from pathlib import Path
+
+# Add the src directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+
+from flutter_mcp.server import get_flutter_docs, search_flutter_docs, get_pub_package_info, process_flutter_mentions
 
 async def test_tools():
     print("🧪 Testing Flutter MCP Tools")

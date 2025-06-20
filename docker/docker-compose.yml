@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  flutter-mcp:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: flutter-mcp-server
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount source code for development
+      - ../src:/app/src:ro
+      # Persist cache between restarts
+      - cache-data:/app/.cache
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+volumes:
+  cache-data:

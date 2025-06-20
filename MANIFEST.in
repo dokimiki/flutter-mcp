@@ -1,9 +1,9 @@
-include README.md
+include docs/README.md
 include LICENSE
-include CONTRIBUTING.md
-include DEVELOPMENT.md
+include docs/CONTRIBUTING.md
+include docs/DEVELOPMENT.md
 include pyproject.toml
-include *.py
-exclude test_*.py
-exclude debug_*.py
-exclude *.sh
+recursive-include src *.py
+recursive-exclude tests *
+recursive-exclude scripts *
+exclude docker/*

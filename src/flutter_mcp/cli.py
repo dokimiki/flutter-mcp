@@ -28,15 +28,9 @@ def main():
     )
     
     parser.add_argument(
-        '--redis-url',
-        default=os.environ.get('REDIS_URL', 'redis://localhost:6379'),
-        help='Redis URL for caching (default: redis://localhost:6379)'
-    )
-    
-    parser.add_argument(
-        '--no-cache',
-        action='store_true',
-        help='Run without Redis caching (slower responses)'
+        '--cache-dir',
+        default=None,
+        help='Custom cache directory (default: platform-specific)'
     )
     
     parser.add_argument(
@@ -72,14 +66,12 @@ def main():
         try:
             # Set environment variables
             env = os.environ.copy()
-            if args.redis_url:
-                env['REDIS_URL'] = args.redis_url
-            if args.no_cache:
-                env['NO_CACHE'] = '1'
+            if args.cache_dir:
+                env['CACHE_DIR'] = args.cache_dir
             if args.debug:
                 env['DEBUG'] = '1'
             
-            subprocess.run(['mcp', 'dev', 'server.py'], env=env)
+            subprocess.run(['mcp', 'dev', 'src/flutter_mcp/server.py'], env=env)
         except KeyboardInterrupt:
             print("\n\n✅ Server stopped")
         except FileNotFoundError:
@@ -90,25 +82,22 @@ def main():
         # Run the server directly
         print(f"🚀 Starting Flutter MCP Server v{__version__}")
         
-        if args.no_cache:
-            print("⚠️  Running without cache - responses will be slower")
-        else:
-            print(f"📦 Using Redis at: {args.redis_url}")
+        print("📦 Using built-in SQLite cache")
+        if args.cache_dir:
+            print(f"💾 Cache directory: {args.cache_dir}")
         
         print("⚡ Server running - connect your AI assistant")
         print("⚡ Use Ctrl+C to stop the server\n")
         
         # Set environment variables
-        if args.redis_url:
-            os.environ['REDIS_URL'] = args.redis_url
-        if args.no_cache:
-            os.environ['NO_CACHE'] = '1'
+        if args.cache_dir:
+            os.environ['CACHE_DIR'] = args.cache_dir
         if args.debug:
             os.environ['DEBUG'] = '1'
         
         try:
             # Import and run the server
-            from server import main as server_main
+            from . import main as server_main
             server_main()
         except KeyboardInterrupt:
             print("\n\n✅ Server stopped")
