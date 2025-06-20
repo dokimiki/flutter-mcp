@@ -1,0 +1,112 @@
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: macos-latest
+            platform: macos
+            arch: x64
+          - os: macos-14  # M1 runner
+            platform: macos
+            arch: arm64
+          - os: windows-latest
+            platform: windows
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -e .
+    
+    - name: Build executable
+      run: |
+        pyinstaller build.spec
+    
+    - name: Rename executable
+      shell: bash
+      run: |
+        mkdir -p releases
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          mv dist/flutter-mcp.exe releases/flutter-mcp-${{ matrix.platform }}-${{ matrix.arch }}.exe
+        else
+          mv dist/flutter-mcp releases/flutter-mcp-${{ matrix.platform }}-${{ matrix.arch }}
+        fi
+    
+    - name: Test executable
+      shell: bash
+      run: |
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          ./releases/flutter-mcp-${{ matrix.platform }}-${{ matrix.arch }}.exe --version
+        else
+          ./releases/flutter-mcp-${{ matrix.platform }}-${{ matrix.arch }} --version
+        fi
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: flutter-mcp-${{ matrix.platform }}-${{ matrix.arch }}
+        path: releases/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: releases
+        pattern: flutter-mcp-*
+        merge-multiple: true
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: releases/*
+        body: |
+          # Flutter MCP Server ${{ github.ref_name }}
+          
+          ## Installation
+          
+          ### Option 1: Download Executable (Easiest!)
+          Download the appropriate executable for your platform below. No Python required!
+          
+          ### Option 2: Install from PyPI
+          ```bash
+          pip install flutter-mcp-server
+          ```
+          
+          ### Option 3: Docker
+          ```bash
+          docker run -p 8000:8000 ghcr.io/flutter-mcp/flutter-mcp:${{ github.ref_name }}
+          ```
+          
+          ## What's New
+          See [CHANGELOG.md](https://github.com/flutter-mcp/flutter-mcp/blob/main/CHANGELOG.md) for details.
+        draft: false
+        prerelease: false
