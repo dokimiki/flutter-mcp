@@ -107,7 +107,7 @@ docker run -p 8000:8000 ghcr.io/flutter-mcp/flutter-mcp:latest
 # macOS
 brew install redis && brew services start redis
 
-# Ubuntu/Debian  
+# Ubuntu/Debian
 sudo apt-get install redis-server
 
 # Windows (WSL)
@@ -135,7 +135,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "command": "flutter-mcp",
       "args": ["start"],
       "env": {
-        "REDIS_URL": "redis://localhost:6379"  // Optional: if using non-default Redis
+        "REDIS_URL": "redis://localhost:6379" // Optional: if using non-default Redis
       }
     }
   }
@@ -169,15 +169,17 @@ In your `.continuerc.json`:
 
 ```json
 {
-  "models": [{
-    "provider": "claude",
-    "mcp_servers": {
-      "flutter-mcp": {
-        "command": "flutter-mcp",
-        "args": ["start"]
+  "models": [
+    {
+      "provider": "claude",
+      "mcp_servers": {
+        "flutter-mcp": {
+          "command": "flutter-mcp",
+          "args": ["start"]
+        }
       }
     }
-  }]
+  ]
 }
 ```
 
@@ -214,6 +216,7 @@ Mention any Flutter/Dart package in your prompts, and Flutter MCP will automatic
 ```
 
 💡 **Pro tip**: For explicit package documentation, use `@flutter_mcp package_name`:
+
 ```
 "Explain @flutter_mcp freezed code generation"
 "Show me all @flutter_mcp get_it service locator patterns"
@@ -224,6 +227,7 @@ Mention any Flutter/Dart package in your prompts, and Flutter MCP will automatic
 Flutter MCP provides 5 powerful tools for AI assistants:
 
 ### 1. `get_flutter_docs`
+
 Fetches official Flutter/Dart API documentation.
 
 ```json
@@ -237,6 +241,7 @@ Fetches official Flutter/Dart API documentation.
 ```
 
 ### 2. `get_pub_package_info`
+
 Gets complete package information including README from pub.dev.
 
 ```json
@@ -249,6 +254,7 @@ Gets complete package information including README from pub.dev.
 ```
 
 ### 3. `search_flutter_docs`
+
 Intelligently searches across Flutter/Dart documentation.
 
 ```json
@@ -261,6 +267,7 @@ Intelligently searches across Flutter/Dart documentation.
 ```
 
 ### 4. `process_flutter_mentions`
+
 Processes `@flutter_mcp` mentions in text for context injection.
 
 ```json
@@ -273,6 +280,7 @@ Processes `@flutter_mcp` mentions in text for context injection.
 ```
 
 ### 5. `health_check`
+
 Monitors the health of all scrapers and services.
 
 ```json
@@ -397,13 +405,13 @@ For production or team use:
 
 ```bash
 # Run with built-in Redis
-docker run -d -p 3333:3333 --name flutter-mcp ghcr.io/yourusername/flutter-mcp:latest
+docker run -d -p 3333:3333 --name flutter-mcp ghcr.io/adamsmaka/flutter-mcp:latest
 
 # Use external Redis
 docker run -d -p 3333:3333 \
   -e REDIS_URL=redis://your-redis:6379 \
   --name flutter-mcp \
-  ghcr.io/yourusername/flutter-mcp:latest
+  ghcr.io/adamsmaka/flutter-mcp:latest
 ```
 
 </details>
@@ -416,8 +424,8 @@ We love contributions! This is an open-source project and we welcome improvement
 
 ### Quick Ways to Contribute
 
-- 🐛 **Report bugs** - [Open an issue](https://github.com/yourusername/flutter-mcp/issues)
-- 💡 **Suggest features** - [Start a discussion](https://github.com/yourusername/flutter-mcp/discussions)  
+- 🐛 **Report bugs** - [Open an issue](https://github.com/adamsmaka/flutter-mcp/issues)
+- 💡 **Suggest features** - [Start a discussion](https://github.com/adamsmaka/flutter-mcp/discussions)
 - 📖 **Improve docs** - Even fixing a typo helps!
 - 🧪 **Add tests** - Help us reach 100% coverage
 - 🌐 **Add translations** - Make Flutter MCP accessible globally
@@ -426,6 +434,7 @@ We love contributions! This is an open-source project and we welcome improvement
 ### 🚀 Coming Soon
 
 We're continuously improving Flutter MCP! On our roadmap:
+
 - 📚 Stack Overflow integration for common Flutter questions
 - 🏷️ Version-specific documentation (e.g., `@flutter_mcp riverpod:2.0.0`)
 - 🎯 IDE extensions for even deeper integration
@@ -446,20 +455,21 @@ Want to help build these features? [Join us!](CONTRIBUTING.md)
 Help other Flutter developers discover AI superpowers:
 
 <p align="center">
-<a href="https://twitter.com/intent/tweet?text=Just%20gave%20my%20AI%20assistant%20Flutter%20superpowers%20with%20%40flutter_mcp!%20Real-time%20docs%20for%20any%20pub.dev%20package.%20No%20more%20outdated%20code!%20%23Flutter%20%23AI&url=https://github.com/yourusername/flutter-mcp">
-  <img src="https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Fgithub.com%2Fyourusername%2Fflutter-mcp" alt="Tweet">
+<a href="https://twitter.com/intent/tweet?text=Just%20gave%20my%20AI%20assistant%20Flutter%20superpowers%20with%20%40flutter_mcp!%20Real-time%20docs%20for%20any%20pub.dev%20package.%20No%20more%20outdated%20code!%20%23Flutter%20%23AI&url=https://github.com/adamsmaka/flutter-mcp">
+  <img src="https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Fgithub.com%2Fadamsmaka%2Fflutter-mcp" alt="Tweet">
 </a>
 </p>
 
 ### Why Flutter Developers Love It
 
 - **"Finally, my AI understands modern Flutter!"** - Senior Flutter Dev
-- **"Saved hours of debugging deprecated code"** - Startup CTO  
+- **"Saved hours of debugging deprecated code"** - Startup CTO
 - **"Essential tool for any Flutter + AI workflow"** - Google Developer Expert
 
 Add the badge to your project:
+
 ```markdown
-[![Flutter MCP](https://img.shields.io/badge/Enhanced%20by-Flutter%20MCP-blue)](https://github.com/yourusername/flutter-mcp)
+[![Flutter MCP](https://img.shields.io/badge/Enhanced%20by-Flutter%20MCP-blue)](https://github.com/adamsmaka/flutter-mcp)
 ```
 
 ## 📄 License
@@ -480,8 +490,8 @@ MIT © 2024 Flutter MCP Contributors
   <strong>Ready to give your AI Flutter superpowers?</strong>
   <br><br>
   <a href="#-get-started-in-2-minutes">Get Started</a> • 
-  <a href="https://github.com/yourusername/flutter-mcp/issues">Report Bug</a> • 
-  <a href="https://github.com/yourusername/flutter-mcp/discussions">Request Feature</a>
+  <a href="https://github.com/adamsmaka/flutter-mcp/issues">Report Bug</a> • 
+  <a href="https://github.com/adamsmaka/flutter-mcp/discussions">Request Feature</a>
   <br><br>
   Made with ❤️ by the Flutter community
 </p>

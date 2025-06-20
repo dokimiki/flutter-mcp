@@ -7,24 +7,31 @@ First off, **thank you** for considering contributing to Flutter MCP! 🙏 This 
 There are many ways to contribute to Flutter MCP, and we value them all:
 
 ### 🐛 Report Bugs
-Found something broken? [Open an issue](https://github.com/yourusername/flutter-mcp/issues/new?template=bug_report.md) and help us squash it!
+
+Found something broken? [Open an issue](https://github.com/adamsmaka/flutter-mcp/issues/new?template=bug_report.md) and help us squash it!
 
 ### 💡 Suggest Features
-Have an idea to make Flutter MCP even better? [Start a discussion](https://github.com/yourusername/flutter-mcp/discussions/new?category=ideas) or [open a feature request](https://github.com/yourusername/flutter-mcp/issues/new?template=feature_request.md)!
+
+Have an idea to make Flutter MCP even better? [Start a discussion](https://github.com/adamsmaka/flutter-mcp/discussions/new?category=ideas) or [open a feature request](https://github.com/adamsmaka/flutter-mcp/issues/new?template=feature_request.md)!
 
 ### 📖 Improve Documentation
+
 Even the smallest documentation fix helps! Whether it's fixing a typo, clarifying instructions, or adding examples - documentation is crucial.
 
 ### 🧪 Write Tests
+
 Help us maintain quality by adding tests. We aim for high test coverage to ensure Flutter MCP stays reliable.
 
 ### 🌐 Add Translations
+
 Make Flutter MCP accessible to developers worldwide by helping with translations.
 
 ### ⭐ Spread the Word
+
 Star the repo, share it with your Flutter community, write a blog post, or tweet about your experience!
 
 ### 💻 Write Code
+
 Fix bugs, implement features, optimize performance - dive into the code and make Flutter MCP better!
 
 ## 🚀 Getting Started
@@ -32,6 +39,7 @@ Fix bugs, implement features, optimize performance - dive into the code and make
 ### Prerequisites
 
 Before you begin, ensure you have:
+
 - Python 3.10 or higher
 - Redis installed and running
 - Git for version control
@@ -40,48 +48,48 @@ Before you begin, ensure you have:
 ### Development Setup
 
 1. **Fork the repository**
-   
-   Click the "Fork" button at the top right of the [Flutter MCP repository](https://github.com/yourusername/flutter-mcp).
+
+   Click the "Fork" button at the top right of the [Flutter MCP repository](https://github.com/adamsmaka/flutter-mcp).
 
 2. **Clone your fork**
-   
+
    ```bash
    git clone https://github.com/YOUR-USERNAME/flutter-mcp.git
    cd flutter-mcp
    ```
 
 3. **Set up the development environment**
-   
+
    ```bash
    # Create a virtual environment
    python -m venv venv
-   
+
    # Activate it
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
+
    # Install dependencies in development mode
    pip install -e ".[dev]"
    ```
 
 4. **Start Redis**
-   
+
    ```bash
    # macOS
    brew services start redis
-   
+
    # Linux
    sudo systemctl start redis
-   
+
    # Docker
    docker run -d -p 6379:6379 --name flutter-mcp-redis redis:alpine
    ```
 
 5. **Run the development server**
-   
+
    ```bash
    # Run with MCP Inspector for debugging
    mcp dev src/flutter_mcp/server.py
-   
+
    # Or run directly
    python -m flutter_mcp.server
    ```
@@ -134,6 +142,7 @@ pytest-watch
 ```
 
 We aim for at least 80% test coverage. Write tests that:
+
 - Cover both happy paths and edge cases
 - Are isolated and don't depend on external services
 - Use mocks for Redis and external API calls
@@ -183,7 +192,7 @@ git push origin feature/your-feature-name
 
 ### 5. Open a Pull Request
 
-1. Go to the [Flutter MCP repository](https://github.com/yourusername/flutter-mcp)
+1. Go to the [Flutter MCP repository](https://github.com/adamsmaka/flutter-mcp)
 2. Click "Compare & pull request"
 3. Fill out the PR template:
    - Describe what changes you made
@@ -241,12 +250,12 @@ We're committed to providing a welcoming and inclusive environment. By participa
 ### Getting Help
 
 - 💬 **Discord**: Join our [Flutter MCP Discord](https://discord.gg/flutter-mcp)
-- 🤔 **Discussions**: Ask questions in [GitHub Discussions](https://github.com/yourusername/flutter-mcp/discussions)
+- 🤔 **Discussions**: Ask questions in [GitHub Discussions](https://github.com/adamsmaka/flutter-mcp/discussions)
 - 📧 **Email**: Reach out to maintainers@flutter-mcp.dev
 
 ## 🏆 Recognition
 
-We believe in recognizing our contributors! 
+We believe in recognizing our contributors!
 
 ### All Contributors
 
@@ -277,7 +286,7 @@ We use the [All Contributors](https://allcontributors.org/) specification to rec
 
 ## 🎯 Current Priorities
 
-Check our [Project Board](https://github.com/yourusername/flutter-mcp/projects) for current priorities. Good first issues are labeled with [`good first issue`](https://github.com/yourusername/flutter-mcp/labels/good%20first%20issue).
+Check our [Project Board](https://github.com/adamsmaka/flutter-mcp/projects) for current priorities. Good first issues are labeled with [`good first issue`](https://github.com/adamsmaka/flutter-mcp/labels/good%20first%20issue).
 
 ### Quick Wins for New Contributors
 
