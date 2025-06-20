@@ -31,6 +31,12 @@ mcp = FastMCP("Flutter Docs Server")
 
 # Import our SQLite-based cache
 from .cache import get_cache
+# Import error handling utilities
+from .error_handling import (
+    NetworkError, DocumentationNotFoundError, RateLimitError,
+    with_retry, safe_http_get, format_error_response,
+    CircuitBreaker
+)
 
 # Initialize cache manager
 cache_manager = get_cache()
@@ -551,8 +557,8 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
                 try:
                     doc = await get_flutter_docs(result["class_name"], result["library"])
                     if not doc.get("error"):
-                    result["documentation_available"] = True
-                    result["content_preview"] = doc.get("content", "")[:300] + "..."
+                        result["documentation_available"] = True
+                        result["content_preview"] = doc.get("content", "")[:300] + "..."
                     else:
                         result["documentation_available"] = False
                         result["error_info"] = doc.get("error_type", "unknown")
