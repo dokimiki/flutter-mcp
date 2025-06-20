@@ -174,13 +174,40 @@ Restart Claude Desktop after saving.
 <details>
 <summary><strong>Claude Code (claude.ai/code)</strong></summary>
 
+#### Option 1: Global Installation (All Projects)
 Claude Code automatically manages MCP servers. Just install the package:
 
 ```bash
 pip install flutter-mcp-server
 ```
 
-Claude Code will detect and use the server automatically when you mention Flutter/Dart packages.
+#### Option 2: Per-Project Configuration (Recommended for Flutter Projects)
+
+To enable Flutter MCP specifically for your Flutter project:
+
+1. Create a `.mcp.json` file in your Flutter project root:
+
+```json
+{
+  "mcpServers": {
+    "flutter-mcp": {
+      "command": "flutter-mcp",
+      "args": ["start"],
+      "env": {}
+    }
+  }
+}
+```
+
+2. Run Claude Code in your project directory:
+```bash
+cd your-flutter-project
+claude
+```
+
+**Important:** Don't use the `--skip-permission-check` flag when running Claude Code, as it prevents MCP servers from being loaded.
+
+With this setup, Flutter MCP will automatically provide documentation for all packages in your `pubspec.yaml` whenever you use Claude Code in this project.
 
 </details>
 

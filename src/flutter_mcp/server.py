@@ -226,9 +226,21 @@ def resolve_flutter_url(query: str) -> Optional[str]:
         r"^widgets\.(\w+)$": "https://api.flutter.dev/flutter/widgets/{0}-class.html",
         r"^material\.(\w+)$": "https://api.flutter.dev/flutter/material/{0}-class.html",
         r"^cupertino\.(\w+)$": "https://api.flutter.dev/flutter/cupertino/{0}-class.html",
+        r"^painting\.(\w+)$": "https://api.flutter.dev/flutter/painting/{0}-class.html",
+        r"^animation\.(\w+)$": "https://api.flutter.dev/flutter/animation/{0}-class.html",
+        r"^rendering\.(\w+)$": "https://api.flutter.dev/flutter/rendering/{0}-class.html",
+        r"^services\.(\w+)$": "https://api.flutter.dev/flutter/services/{0}-class.html",
+        r"^gestures\.(\w+)$": "https://api.flutter.dev/flutter/gestures/{0}-class.html",
+        r"^foundation\.(\w+)$": "https://api.flutter.dev/flutter/foundation/{0}-class.html",
+        # Dart core libraries
         r"^dart:core\.(\w+)$": "https://api.dart.dev/stable/dart-core/{0}-class.html",
         r"^dart:async\.(\w+)$": "https://api.dart.dev/stable/dart-async/{0}-class.html",
         r"^dart:collection\.(\w+)$": "https://api.dart.dev/stable/dart-collection/{0}-class.html",
+        r"^dart:convert\.(\w+)$": "https://api.dart.dev/stable/dart-convert/{0}-class.html",
+        r"^dart:io\.(\w+)$": "https://api.dart.dev/stable/dart-io/{0}-class.html",
+        r"^dart:math\.(\w+)$": "https://api.dart.dev/stable/dart-math/{0}-class.html",
+        r"^dart:typed_data\.(\w+)$": "https://api.dart.dev/stable/dart-typed_data/{0}-class.html",
+        r"^dart:ui\.(\w+)$": "https://api.dart.dev/stable/dart-ui/{0}-class.html",
     }
     
     for pattern, url_template in patterns.items():
@@ -267,11 +279,19 @@ async def get_flutter_docs(
     # Rate-limited fetch from Flutter docs
     await rate_limiter.acquire()
     
-    url = f"https://api.flutter.dev/flutter/{library}/{class_name}-class.html"
+    # Determine URL based on library type
+    if library.startswith("dart:"):
+        # Convert dart:core to dart-core format for Dart API
+        dart_lib = library.replace("dart:", "dart-")
+        url = f"https://api.dart.dev/stable/{dart_lib}/{class_name}-class.html"
+    else:
+        # Flutter libraries use api.flutter.dev
+        url = f"https://api.flutter.dev/flutter/{library}/{class_name}-class.html"
+    
     logger.info("fetching_docs", url=url)
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             response = await client.get(
                 url,
                 headers={
@@ -373,6 +393,8 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
         ("State", "widgets", "Logic and internal state for a StatefulWidget"),
         ("InheritedWidget", "widgets", "Base class for widgets that propagate information down the tree"),
         ("Provider", "widgets", "A widget that provides a value to its descendants"),
+        ("ValueListenableBuilder", "widgets", "Rebuilds when ValueListenable changes"),
+        ("NotificationListener", "widgets", "Listens for Notifications bubbling up"),
         
         # Layout widgets
         ("Container", "widgets", "A convenience widget that combines common painting, positioning, and sizing"),
@@ -380,16 +402,62 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
         ("Column", "widgets", "Displays children in a vertical array"),
         ("Stack", "widgets", "Positions children relative to the box edges"),
         ("Scaffold", "material", "Basic material design visual layout structure"),
+        ("Expanded", "widgets", "Expands a child to fill available space in Row/Column"),
+        ("Flexible", "widgets", "Controls how a child flexes in Row/Column"),
+        ("Wrap", "widgets", "Displays children in multiple runs"),
+        ("Flow", "widgets", "Positions children using transformation matrices"),
+        ("Table", "widgets", "Displays children in a table layout"),
+        ("Align", "widgets", "Aligns a child within itself"),
+        ("Center", "widgets", "Centers a child within itself"),
+        ("Positioned", "widgets", "Positions a child in a Stack"),
+        ("FittedBox", "widgets", "Scales and positions child within itself"),
+        ("AspectRatio", "widgets", "Constrains child to specific aspect ratio"),
+        ("ConstrainedBox", "widgets", "Imposes additional constraints on child"),
+        ("SizedBox", "widgets", "Box with a specified size"),
+        ("FractionallySizedBox", "widgets", "Sizes child to fraction of total space"),
+        ("LimitedBox", "widgets", "Limits child size when unconstrained"),
+        ("Offstage", "widgets", "Lays out child as if visible but paints nothing"),
+        ("LayoutBuilder", "widgets", "Builds widget tree based on parent constraints"),
         
         # Navigation
         ("Navigator", "widgets", "Manages a stack of Route objects"),
         ("Route", "widgets", "An abstraction for an entry managed by a Navigator"),
         ("MaterialPageRoute", "material", "A modal route that replaces the entire screen"),
+        ("NavigationBar", "material", "Material 3 navigation bar"),
+        ("NavigationRail", "material", "Material navigation rail"),
+        ("BottomNavigationBar", "material", "Bottom navigation bar"),
+        ("Drawer", "material", "Material design drawer"),
+        ("TabBar", "material", "Material design tabs"),
+        ("TabBarView", "material", "Page view for TabBar"),
+        ("WillPopScope", "widgets", "Intercepts back button press"),
+        ("BackButton", "material", "Material design back button"),
         
         # Input widgets
         ("TextField", "material", "A material design text field"),
         ("TextFormField", "material", "A FormField that contains a TextField"),
         ("Form", "widgets", "Container for form fields"),
+        ("GestureDetector", "widgets", "Detects gestures on widgets"),
+        ("InkWell", "material", "Rectangular area that responds to touch with ripple"),
+        ("Dismissible", "widgets", "Can be dismissed by dragging"),
+        ("Draggable", "widgets", "Can be dragged to DragTarget"),
+        ("LongPressDraggable", "widgets", "Draggable triggered by long press"),
+        ("DragTarget", "widgets", "Receives data from Draggable"),
+        ("DropdownButton", "material", "Material design dropdown button"),
+        ("Slider", "material", "Material design slider"),
+        ("Switch", "material", "Material design switch"),
+        ("Checkbox", "material", "Material design checkbox"),
+        ("Radio", "material", "Material design radio button"),
+        ("DatePicker", "material", "Material design date picker"),
+        ("TimePicker", "material", "Material design time picker"),
+        
+        # Lists & Grids
+        ("ListView", "widgets", "Scrollable list of widgets"),
+        ("GridView", "widgets", "Scrollable 2D array of widgets"),
+        ("CustomScrollView", "widgets", "ScrollView with slivers"),
+        ("SingleChildScrollView", "widgets", "Box with single scrollable child"),
+        ("PageView", "widgets", "Scrollable list that works page by page"),
+        ("ReorderableListView", "material", "List where items can be reordered"),
+        ("RefreshIndicator", "material", "Material design pull-to-refresh"),
         
         # Common material widgets
         ("AppBar", "material", "A material design app bar"),
@@ -398,15 +466,54 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
         ("IconButton", "material", "A material design icon button"),
         ("ElevatedButton", "material", "A material design elevated button"),
         ("FloatingActionButton", "material", "A material design floating action button"),
+        ("Chip", "material", "Material design chip"),
+        ("ChoiceChip", "material", "Material design choice chip"),
+        ("FilterChip", "material", "Material design filter chip"),
+        ("ActionChip", "material", "Material design action chip"),
+        ("CircularProgressIndicator", "material", "Material circular progress"),
+        ("LinearProgressIndicator", "material", "Material linear progress"),
+        ("SnackBar", "material", "Material design snackbar"),
+        ("BottomSheet", "material", "Material design bottom sheet"),
+        ("ExpansionPanel", "material", "Material expansion panel"),
+        ("Stepper", "material", "Material design stepper"),
+        ("DataTable", "material", "Material design data table"),
+        
+        # Visual Effects
+        ("Opacity", "widgets", "Makes child partially transparent"),
+        ("Transform", "widgets", "Applies transformation before painting"),
+        ("RotatedBox", "widgets", "Rotates child by integral quarters"),
+        ("ClipRect", "widgets", "Clips child to rectangle"),
+        ("ClipRRect", "widgets", "Clips child to rounded rectangle"),
+        ("ClipOval", "widgets", "Clips child to oval"),
+        ("ClipPath", "widgets", "Clips child to path"),
+        ("DecoratedBox", "widgets", "Paints decoration around child"),
+        ("BackdropFilter", "widgets", "Applies filter to existing painted content"),
         
         # Animation
         ("AnimatedBuilder", "widgets", "A widget that rebuilds when animation changes"),
         ("AnimationController", "animation", "Controls an animation"),
         ("Hero", "widgets", "Marks a child for hero animations"),
+        ("AnimatedContainer", "widgets", "Animated version of Container"),
+        ("AnimatedOpacity", "widgets", "Animated version of Opacity"),
+        ("AnimatedPositioned", "widgets", "Animated version of Positioned"),
+        ("AnimatedDefaultTextStyle", "widgets", "Animated version of DefaultTextStyle"),
+        ("AnimatedAlign", "widgets", "Animated version of Align"),
+        ("AnimatedPadding", "widgets", "Animated version of Padding"),
+        ("AnimatedSize", "widgets", "Animates its size to match child"),
+        ("AnimatedCrossFade", "widgets", "Cross-fades between two children"),
+        ("AnimatedSwitcher", "widgets", "Animates when switching between children"),
         
         # Async widgets
         ("FutureBuilder", "widgets", "Builds based on interaction with a Future"),
         ("StreamBuilder", "widgets", "Builds based on interaction with a Stream"),
+        
+        # Utility widgets
+        ("MediaQuery", "widgets", "Establishes media query subtree"),
+        ("Theme", "material", "Applies theme to descendant widgets"),
+        ("DefaultTextStyle", "widgets", "Default text style for descendants"),
+        ("Semantics", "widgets", "Annotates widget tree with semantic descriptions"),
+        ("MergeSemantics", "widgets", "Merges semantics of descendants"),
+        ("ExcludeSemantics", "widgets", "Drops semantics of descendants"),
     ]
     
     # Score Flutter items based on query match
@@ -450,20 +557,59 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
     
     # 4. Search popular pub.dev packages
     popular_packages = [
+        # State Management
         ("provider", "State management library that makes it easy to connect business logic to widgets"),
         ("riverpod", "A reactive caching and data-binding framework"),
         ("bloc", "State management library implementing the BLoC design pattern"),
         ("get", "Open source state management, navigation and utilities"),
+        ("mobx", "Reactive state management library"),
+        ("redux", "Predictable state container"),
+        ("stacked", "MVVM architecture solution"),
+        ("get_it", "Service locator for dependency injection"),
+        
+        # Networking
         ("dio", "Powerful HTTP client for Dart with interceptors and FormData"),
         ("http", "A composable, multi-platform, Future-based API for HTTP requests"),
+        ("retrofit", "Type-safe HTTP client generator"),
+        ("chopper", "HTTP client with built-in JsonConverter"),
+        ("graphql_flutter", "GraphQL client for Flutter"),
+        ("socket_io_client", "Socket.IO client"),
+        ("web_socket_channel", "WebSocket connections"),
+        
+        # Storage & Database
         ("shared_preferences", "Flutter plugin for reading and writing simple key-value pairs"),
         ("sqflite", "SQLite plugin for Flutter with support for iOS, Android and MacOS"),
         ("hive", "Lightweight and blazing fast key-value database written in pure Dart"),
+        ("isar", "Fast cross-platform database"),
+        ("objectbox", "High-performance NoSQL database"),
+        ("drift", "Reactive persistence library"),
+        ("floor", "SQLite abstraction with Room-like API"),
+        
+        # Firebase
         ("firebase_core", "Flutter plugin to use Firebase Core API"),
         ("firebase_auth", "Flutter plugin for Firebase Auth"),
         ("firebase_database", "Flutter plugin for Firebase Realtime Database"),
         ("cloud_firestore", "Flutter plugin for Cloud Firestore"),
+        ("firebase_messaging", "Push notifications via FCM"),
+        ("firebase_storage", "Flutter plugin for Firebase Cloud Storage"),
+        ("firebase_analytics", "Flutter plugin for Google Analytics for Firebase"),
+        
+        # UI/UX Libraries
         ("flutter_bloc", "Flutter widgets that make it easy to implement BLoC design pattern"),
+        ("animations", "Beautiful pre-built animations for Flutter"),
+        ("flutter_svg", "SVG rendering and widget library for Flutter"),
+        ("cached_network_image", "Flutter library to load and cache network images"),
+        ("flutter_slidable", "Slidable list item actions"),
+        ("shimmer", "Shimmer loading effect"),
+        ("liquid_swipe", "Liquid swipe page transitions"),
+        ("flutter_staggered_grid_view", "Staggered grid layouts"),
+        ("carousel_slider", "Carousel widget"),
+        ("photo_view", "Zoomable image widget"),
+        ("flutter_spinkit", "Loading indicators collection"),
+        ("lottie", "Render After Effects animations"),
+        ("rive", "Interactive animations"),
+        
+        # Platform Integration
         ("url_launcher", "Flutter plugin for launching URLs"),
         ("path_provider", "Flutter plugin for getting commonly used locations on the filesystem"),
         ("image_picker", "Flutter plugin for selecting images from image library or camera"),
@@ -471,11 +617,27 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
         ("permission_handler", "Permission plugin for Flutter"),
         ("geolocator", "Flutter geolocation plugin for Android and iOS"),
         ("google_fonts", "Flutter package to use fonts from fonts.google.com"),
-        ("cached_network_image", "Flutter library to load and cache network images"),
-        ("flutter_svg", "SVG rendering and widget library for Flutter"),
-        ("animations", "Beautiful pre-built animations for Flutter"),
+        ("flutter_local_notifications", "Local notifications"),
+        ("share_plus", "Share content to other apps"),
+        ("file_picker", "Native file picker"),
+        ("open_file", "Open files with default apps"),
+        
+        # Navigation
         ("go_router", "A declarative routing package for Flutter"),
         ("auto_route", "Code generation for type-safe route navigation"),
+        ("beamer", "Handle your application routing"),
+        ("fluro", "Flutter routing library"),
+        
+        # Developer Tools
+        ("logger", "Beautiful logging utility"),
+        ("pretty_dio_logger", "Dio interceptor for logging"),
+        ("flutter_dotenv", "Load environment variables"),
+        ("device_info_plus", "Device information"),
+        ("package_info_plus", "App package information"),
+        ("equatable", "Simplify equality comparisons"),
+        ("freezed", "Code generation for immutable classes"),
+        ("json_serializable", "Automatically generate code for JSON"),
+        ("build_runner", "Build system for Dart code generation"),
     ]
     
     for package_name, description in popular_packages:
@@ -499,6 +661,9 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
             ("bloc", "Business Logic Component pattern"),
             ("get", "Lightweight state management solution"),
             ("mobx", "Reactive state management"),
+            ("redux", "Predictable state container"),
+            ("ValueNotifier", "Simple observable pattern"),
+            ("ChangeNotifier", "Observable object for multiple listeners"),
         ],
         "navigation": [
             ("Navigator", "Stack-based navigation in Flutter"),
@@ -506,12 +671,21 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
             ("auto_route", "Code generation for routes"),
             ("Named routes", "Navigation using route names"),
             ("Deep linking", "Handle URLs in your app"),
+            ("WillPopScope", "Intercept back navigation"),
+            ("NavigatorObserver", "Observe navigation events"),
+            ("Hero animations", "Animate widgets between routes"),
+            ("Modal routes", "Full-screen modal pages"),
+            ("BottomSheet navigation", "Navigate with bottom sheets"),
         ],
         "http": [
             ("http", "Official Dart HTTP package"),
             ("dio", "Advanced HTTP client with interceptors"),
             ("retrofit", "Type-safe HTTP client generator"),
             ("chopper", "HTTP client with built-in JsonConverter"),
+            ("GraphQL", "Query language for APIs"),
+            ("REST API", "RESTful web services"),
+            ("WebSocket", "Real-time bidirectional communication"),
+            ("gRPC", "High performance RPC framework"),
         ],
         "database": [
             ("sqflite", "SQLite for Flutter"),
@@ -519,6 +693,11 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
             ("drift", "Reactive persistence library"),
             ("objectbox", "Fast NoSQL database"),
             ("shared_preferences", "Simple key-value storage"),
+            ("isar", "Fast cross-platform database"),
+            ("floor", "SQLite abstraction"),
+            ("sembast", "NoSQL persistent store"),
+            ("Firebase Realtime Database", "Cloud-hosted NoSQL database"),
+            ("Cloud Firestore", "Scalable NoSQL cloud database"),
         ],
         "animation": [
             ("AnimationController", "Control animations"),
@@ -527,6 +706,103 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
             ("animations", "Pre-built animation package"),
             ("rive", "Interactive animations"),
             ("lottie", "After Effects animations"),
+            ("AnimatedContainer", "Implicit animations"),
+            ("TweenAnimationBuilder", "Simple custom animations"),
+            ("Curves", "Animation easing functions"),
+            ("Physics-based animations", "Spring and friction animations"),
+        ],
+        "architecture": [
+            ("BLoC Pattern", "Business Logic Component pattern for state management"),
+            ("MVVM", "Model-View-ViewModel architecture pattern"),
+            ("Clean Architecture", "Domain-driven design with clear separation"),
+            ("Repository Pattern", "Abstraction layer for data sources"),
+            ("Provider Pattern", "Dependency injection and state management"),
+            ("GetX Pattern", "Reactive state management with GetX"),
+            ("MVC", "Model-View-Controller pattern in Flutter"),
+            ("Redux", "Predictable state container pattern"),
+            ("Riverpod Architecture", "Modern reactive caching framework"),
+            ("Domain Driven Design", "DDD principles in Flutter"),
+            ("Hexagonal Architecture", "Ports and adapters pattern"),
+            ("Feature-based structure", "Organize code by features"),
+        ],
+        "testing": [
+            ("Widget Testing", "Testing Flutter widgets in isolation"),
+            ("Integration Testing", "End-to-end testing of Flutter apps"),
+            ("Unit Testing", "Testing Dart code logic"),
+            ("Golden Testing", "Visual regression testing"),
+            ("Mockito", "Mocking framework for Dart"),
+            ("flutter_test", "Flutter testing framework"),
+            ("test", "Dart testing package"),
+            ("integration_test", "Flutter integration testing"),
+            ("mocktail", "Type-safe mocking library"),
+            ("Test Coverage", "Measuring test completeness"),
+            ("TDD", "Test-driven development"),
+            ("BDD", "Behavior-driven development"),
+        ],
+        "performance": [
+            ("Performance Profiling", "Analyzing app performance"),
+            ("Widget Inspector", "Debugging widget trees"),
+            ("Timeline View", "Performance timeline analysis"),
+            ("Memory Profiling", "Analyzing memory usage"),
+            ("Shader Compilation", "Reducing shader jank"),
+            ("Build Optimization", "Optimizing build methods"),
+            ("Lazy Loading", "Loading content on demand"),
+            ("Image Caching", "Efficient image loading"),
+            ("Code Splitting", "Reducing initial bundle size"),
+            ("Tree Shaking", "Removing unused code"),
+            ("Const Constructors", "Compile-time optimizations"),
+            ("RepaintBoundary", "Isolate expensive paints"),
+        ],
+        "platform": [
+            ("Platform Channels", "Communication with native code"),
+            ("Method Channel", "Invoking platform-specific APIs"),
+            ("Event Channel", "Streaming data from platform"),
+            ("iOS Integration", "Flutter iOS-specific features"),
+            ("Android Integration", "Flutter Android-specific features"),
+            ("Web Support", "Flutter web-specific features"),
+            ("Desktop Support", "Flutter desktop applications"),
+            ("Embedding Flutter", "Adding Flutter to existing apps"),
+            ("Platform Views", "Embedding native views"),
+            ("FFI", "Foreign Function Interface"),
+            ("Plugin Development", "Creating Flutter plugins"),
+            ("Platform-specific UI", "Adaptive UI patterns"),
+        ],
+        "debugging": [
+            ("Flutter Inspector", "Visual debugging tool"),
+            ("Logging", "Debug logging in Flutter"),
+            ("Breakpoints", "Using breakpoints in Flutter"),
+            ("DevTools", "Flutter DevTools suite"),
+            ("Error Handling", "Handling errors in Flutter"),
+            ("Crash Reporting", "Capturing and reporting crashes"),
+            ("Debug Mode", "Flutter debug mode features"),
+            ("Assert Statements", "Debug-only checks"),
+            ("Stack Traces", "Understanding error traces"),
+            ("Network Debugging", "Inspecting network requests"),
+            ("Layout Explorer", "Visualize layout constraints"),
+            ("Performance Overlay", "On-device performance metrics"),
+        ],
+        "forms": [
+            ("Form", "Container for form fields"),
+            ("TextFormField", "Text input with validation"),
+            ("FormField", "Base class for form fields"),
+            ("Form Validation", "Validating user input"),
+            ("Input Decoration", "Styling form fields"),
+            ("Focus Management", "Managing input focus"),
+            ("Keyboard Actions", "Custom keyboard actions"),
+            ("Input Formatters", "Format input as typed"),
+            ("Form State", "Managing form state"),
+            ("Custom Form Fields", "Creating custom inputs"),
+        ],
+        "theming": [
+            ("ThemeData", "Application theme configuration"),
+            ("Material Theme", "Material Design theming"),
+            ("Dark Mode", "Supporting dark theme"),
+            ("Custom Themes", "Creating custom themes"),
+            ("Theme Extensions", "Extending theme data"),
+            ("Color Schemes", "Material 3 color system"),
+            ("Typography", "Text theming"),
+            ("Dynamic Theming", "Runtime theme changes"),
+            ("Platform Theming", "Platform-specific themes"),
         ],
     }
     
@@ -842,7 +1118,7 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
     logger.info("fetching_package", url=url)
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             # Fetch package info
             response = await client.get(
                 url,
