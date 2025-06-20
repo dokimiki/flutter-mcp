@@ -14,21 +14,42 @@ import httpx
 from bs4 import BeautifulSoup
 import structlog
 from structlog.contextvars import bind_contextvars
+from rich.console import Console
+
+# Import our custom logging utilities
+from .logging_utils import format_cache_stats, print_server_header
 
 # Initialize structured logging
 # IMPORTANT: For MCP servers, logs must go to stderr, not stdout
 # stdout is reserved for the JSON-RPC protocol
 import sys
+import logging
+
+# Configure structlog with enhanced formatting
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.dev.ConsoleRenderer()
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        structlog.processors.TimeStamper(fmt="%H:%M:%S", utc=False),
+        # Our custom processor comes before the renderer!
+        format_cache_stats,
+        # Use ConsoleRenderer for beautiful colored output
+        structlog.dev.ConsoleRenderer(
+            colors=True,
+            exception_formatter=structlog.dev.plain_traceback,
+        ),
     ],
-    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr)
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+    cache_logger_on_first_use=True,
 )
 logger = structlog.get_logger()
+
+# Rich console for direct output
+console = Console(stderr=True)
 
 # Initialize FastMCP server
 mcp = FastMCP("Flutter Docs Server")
@@ -1400,9 +1421,12 @@ def get_health_message(status: str) -> str:
 
 def main():
     """Main entry point for the Flutter MCP server"""
-    logger.info("flutter_mcp_starting", version="0.1.0")
+    # When running from CLI, the header is already printed
+    # Only log when not running from CLI (e.g., direct execution)
+    if not hasattr(sys, '_flutter_mcp_cli'):
+        logger.info("flutter_mcp_starting", version="0.1.0")
     
-    # Initialize cache
+    # Initialize cache and show stats
     try:
         cache_stats = cache_manager.get_stats()
         logger.info("cache_ready", stats=cache_stats)

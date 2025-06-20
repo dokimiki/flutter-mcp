@@ -80,21 +80,29 @@ def main():
     
     else:  # start or serve
         # Run the server directly
-        # Only print to stderr when running from CLI to avoid interfering with MCP protocol
-        print(f"🚀 Starting Flutter MCP Server v{__version__}", file=sys.stderr)
+        # Print cool header using rich
+        from flutter_mcp.logging_utils import print_server_header
+        print_server_header()
         
-        print("📦 Using built-in SQLite cache", file=sys.stderr)
+        from rich.console import Console
+        console = Console(stderr=True)
+        
+        console.print(f"\n[bold green]🚀 Starting Flutter MCP Server v{__version__}[/bold green]")
+        console.print("[cyan]📦 Using built-in SQLite cache[/cyan]")
         if args.cache_dir:
-            print(f"💾 Cache directory: {args.cache_dir}", file=sys.stderr)
+            console.print(f"[dim]💾 Cache directory: {args.cache_dir}[/dim]")
         
-        print("⚡ Server running - connect your AI assistant", file=sys.stderr)
-        print("⚡ Use Ctrl+C to stop the server\n", file=sys.stderr)
+        console.print("[yellow]⚡ Server running - connect your AI assistant[/yellow]")
+        console.print("[yellow]⚡ Use Ctrl+C to stop the server[/yellow]\n")
         
         # Set environment variables
         if args.cache_dir:
             os.environ['CACHE_DIR'] = args.cache_dir
         if args.debug:
             os.environ['DEBUG'] = '1'
+        
+        # Set flag to indicate we're running from CLI
+        sys._flutter_mcp_cli = True
         
         try:
             # Import and run the server
