@@ -49,18 +49,18 @@ def main():
     
     # Handle commands
     if args.command == 'version':
-        print(f"Flutter MCP Server v{__version__}")
+        print(f"Flutter MCP Server v{__version__}", file=sys.stderr)
         sys.exit(0)
     
     elif args.command == 'help':
-        parser.print_help()
+        parser.print_help(sys.stderr)
         sys.exit(0)
     
     elif args.command == 'dev':
         # Run with MCP Inspector
-        print("🚀 Starting Flutter MCP Server with MCP Inspector...")
-        print("📝 Opening browser at http://localhost:5173")
-        print("⚡ Use Ctrl+C to stop the server\n")
+        print("🚀 Starting Flutter MCP Server with MCP Inspector...", file=sys.stderr)
+        print("📝 Opening browser at http://localhost:5173", file=sys.stderr)
+        print("⚡ Use Ctrl+C to stop the server\n", file=sys.stderr)
         
         import subprocess
         try:
@@ -73,21 +73,22 @@ def main():
             
             subprocess.run(['mcp', 'dev', 'src/flutter_mcp/server.py'], env=env)
         except KeyboardInterrupt:
-            print("\n\n✅ Server stopped")
+            print("\n\n✅ Server stopped", file=sys.stderr)
         except FileNotFoundError:
-            print("❌ Error: MCP CLI not found. Please install with: pip install 'mcp[cli]'")
+            print("❌ Error: MCP CLI not found. Please install with: pip install 'mcp[cli]'", file=sys.stderr)
             sys.exit(1)
     
     else:  # start or serve
         # Run the server directly
-        print(f"🚀 Starting Flutter MCP Server v{__version__}")
+        # Only print to stderr when running from CLI to avoid interfering with MCP protocol
+        print(f"🚀 Starting Flutter MCP Server v{__version__}", file=sys.stderr)
         
-        print("📦 Using built-in SQLite cache")
+        print("📦 Using built-in SQLite cache", file=sys.stderr)
         if args.cache_dir:
-            print(f"💾 Cache directory: {args.cache_dir}")
+            print(f"💾 Cache directory: {args.cache_dir}", file=sys.stderr)
         
-        print("⚡ Server running - connect your AI assistant")
-        print("⚡ Use Ctrl+C to stop the server\n")
+        print("⚡ Server running - connect your AI assistant", file=sys.stderr)
+        print("⚡ Use Ctrl+C to stop the server\n", file=sys.stderr)
         
         # Set environment variables
         if args.cache_dir:
@@ -100,10 +101,10 @@ def main():
             from . import main as server_main
             server_main()
         except KeyboardInterrupt:
-            print("\n\n✅ Server stopped")
+            print("\n\n✅ Server stopped", file=sys.stderr)
         except ImportError as e:
-            print(f"❌ Error: Failed to import server: {e}")
-            print("Make sure you're in the correct directory and dependencies are installed")
+            print(f"❌ Error: Failed to import server: {e}", file=sys.stderr)
+            print("Make sure you're in the correct directory and dependencies are installed", file=sys.stderr)
             sys.exit(1)
 
 

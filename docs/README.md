@@ -185,39 +185,32 @@ pip install flutter-mcp-server
 
 To enable Flutter MCP specifically for your Flutter project:
 
-1. Create a `.mcp.json` file in your Flutter project root:
-
-```json
-{
-  "mcpServers": {
-    "flutter-mcp": {
-      "command": "flutter-mcp",
-      "args": ["start"],
-      "env": {}
-    }
-  }
-}
+1. First, install Flutter MCP:
+```bash
+# Clone and install locally
+git clone https://github.com/flutter-mcp/flutter-mcp.git
+cd flutter-mcp
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -e .
 ```
 
-**Troubleshooting:** If you get `spawn flutter-mcp ENOENT` error, use one of these configurations:
-
-<details>
-<summary>Using full path (if installed locally)</summary>
+2. Create a `.mcp.json` file in your Flutter project root with the **full path** to flutter-mcp:
 
 ```json
 {
   "mcpServers": {
     "flutter-mcp": {
-      "command": "/path/to/flutter-docs-mcp/venv/bin/flutter-mcp",
+      "command": "/path/to/flutter-mcp/venv/bin/flutter-mcp",
       "args": ["start"]
     }
   }
 }
 ```
-</details>
 
-<details>
-<summary>Using Python module (if installed with pip)</summary>
+Replace `/path/to/flutter-mcp` with the actual path where you cloned the repository.
+
+**Alternative: If you installed via pip globally:**
 
 ```json
 {
@@ -229,9 +222,8 @@ To enable Flutter MCP specifically for your Flutter project:
   }
 }
 ```
-</details>
 
-2. Run Claude Code in your project directory:
+3. Run Claude Code in your project directory:
 ```bash
 cd your-flutter-project
 claude

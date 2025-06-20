@@ -16,13 +16,17 @@ import structlog
 from structlog.contextvars import bind_contextvars
 
 # Initialize structured logging
+# IMPORTANT: For MCP servers, logs must go to stderr, not stdout
+# stdout is reserved for the JSON-RPC protocol
+import sys
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.dev.ConsoleRenderer()
-    ]
+    ],
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr)
 )
 logger = structlog.get_logger()
 
