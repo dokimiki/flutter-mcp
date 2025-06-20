@@ -142,6 +142,19 @@ Restart Claude Desktop after saving.
 </details>
 
 <details>
+<summary><strong>Claude Code (claude.ai/code)</strong></summary>
+
+Claude Code automatically manages MCP servers. Just install the package:
+
+```bash
+pip install flutter-mcp-server
+```
+
+Claude Code will detect and use the server automatically when you mention Flutter/Dart packages.
+
+</details>
+
+<details>
 <summary><strong>Cursor / Windsurf</strong></summary>
 
 In Settings → MCP Servers, add:
