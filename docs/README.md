@@ -586,14 +586,6 @@ We're continuously improving Flutter MCP! On our roadmap:
 
 Want to help build these features? [Join us!](CONTRIBUTING.md)
 
-## 📈 Success Stories
-
-> "Flutter MCP saved me hours of debugging. My AI finally understands modern Flutter!" - @FlutterDev
-
-> "No more copy-pasting from pub.dev. This is how AI should work." - @DartLang
-
-> "Essential tool for any Flutter developer using AI assistants." - @CodeWithAndrea
-
 ## ❤️ Spread the Word
 
 Help other Flutter developers discover AI superpowers:
@@ -604,11 +596,6 @@ Help other Flutter developers discover AI superpowers:
 </a>
 </p>
 
-### Why Flutter Developers Love It
-
-- **"Finally, my AI understands modern Flutter!"** - Senior Flutter Dev
-- **"Saved hours of debugging deprecated code"** - Startup CTO
-- **"Essential tool for any Flutter + AI workflow"** - Google Developer Expert
 
 Add the badge to your project:
 
