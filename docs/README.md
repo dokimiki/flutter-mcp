@@ -205,7 +205,7 @@ cd your-flutter-project
 claude
 ```
 
-**Important:** Don't use the `--skip-permission-check` flag when running Claude Code, as it prevents MCP servers from being loaded.
+**Important:** Don't use the `--dangerously-skip-permissions` flag when running Claude Code, as it prevents MCP servers from being loaded.
 
 With this setup, Flutter MCP will automatically provide documentation for all packages in your `pubspec.yaml` whenever you use Claude Code in this project.
 
