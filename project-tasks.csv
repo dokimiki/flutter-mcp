@@ -5,20 +5,20 @@ T003,Core Development,Create rate limiter class (2 req/sec),Critical,DONE,Claude
 T004,Documentation Processing,Build HTML to Markdown converter,Critical,DONE,Claude,Extract: description / constructors / properties / methods / code examples,T001,4 hours
 T005,Documentation Processing,Implement smart URL resolver,Critical,DONE,Claude,Pattern matching for widgets/material/cupertino/dart:core libraries,T004,2 hours
 T006,API & Integration,Create get_flutter_docs tool,Critical,DONE,Claude,On-demand fetching with cache check first,T002/T003/T004,3 hours
-T007,API & Integration,Create get_pub_package_docs tool,Critical,IN_PROGRESS,Claude,Use official pub.dev API - format package info nicely,T002/T003,2 hours
-T008,API & Integration,Implement @flutter_mcp activation parser,Critical,TODO,Claude,Parse mentions from prompts to trigger package-specific context,T006/T007,2 hours
-T009,Core Development,Add structured logging with structlog,High,TODO,Claude,Log: cache hits/misses / fetch times / errors / query patterns,T001,1 hour
-T010,Testing & QA,Test with popular packages,Critical,TODO,You + Claude,Test: provider / bloc / get_it / dio / http / freezed,T006/T007,2 hours
-T011,Testing & QA,Test with MCP Inspector,Critical,TODO,You,Verify tools work correctly in MCP Inspector before Claude Desktop,T006/T007,1 hour
-T012,Documentation,Write comprehensive README,Critical,TODO,Claude,Installation / features / examples / troubleshooting / contribution guide,,2 hours
-T013,Documentation,Create installation one-liners,Critical,TODO,Claude,npx command / pip install / docker run examples,T012,1 hour
+T007,API & Integration,Create get_pub_package_docs tool,Critical,DONE,Claude,Use official pub.dev API - format package info nicely,T002/T003,2 hours
+T008,API & Integration,Implement @flutter_mcp activation parser,Critical,DONE,Claude,Parse mentions from prompts to trigger package-specific context,T006/T007,2 hours
+T009,Core Development,Add structured logging with structlog,High,DONE,Claude,Log: cache hits/misses / fetch times / errors / query patterns,T001,1 hour
+T010,Testing & QA,Test with popular packages,Critical,DONE,You + Claude,Test: provider / bloc / get_it / dio / http / freezed,T006/T007,2 hours
+T011,Testing & QA,Test with MCP Inspector,Critical,DONE,You,Verify tools work correctly in MCP Inspector before Claude Desktop,T006/T007,1 hour
+T012,Documentation,Write comprehensive README,Critical,DONE,Claude,Installation / features / examples / troubleshooting / contribution guide,,2 hours
+T013,Documentation,Create installation one-liners,Critical,DONE,Claude,npx command / pip install / docker run examples,T012,1 hour
 T014,Marketing & Launch,Create demo video/GIF,Critical,TODO,You,Show: LLM failing -> add @flutter_mcp -> success with latest API info,,3 hours
 T015,Marketing & Launch,Write launch blog post,High,TODO,Claude,Technical deep-dive on architecture and problem solved,T014,2 hours
 T016,Marketing & Launch,Prepare Reddit launch post,Critical,TODO,Claude,Title: 'Built a free tool that gives Claude/ChatGPT current knowledge of any pub.dev package',T014,1 hour
-T017,Community Engagement,Set up GitHub repository,Critical,TODO,You + Claude,Clear README / CONTRIBUTING.md / issue templates / MIT license,,1 hour
+T017,Community Engagement,Set up GitHub repository,Critical,DONE,You + Claude,Clear README / CONTRIBUTING.md / issue templates / MIT license,,1 hour
 T018,Community Engagement,Create Discord/Slack presence,Medium,TODO,You,Join Flutter Discord / be active before launch,,Ongoing
-T019,Distribution,Package for PyPI,High,TODO,Claude,Create pyproject.toml with proper metadata and dependencies,T010,1 hour
-T020,Distribution,Create Docker image,Medium,TODO,Claude,Include Redis or document external Redis requirement,T010,2 hours
+T019,Distribution,Package for PyPI,High,DONE,Claude,Create pyproject.toml with proper metadata and dependencies,T010,1 hour
+T020,Distribution,Create Docker image,Medium,DONE,Claude,Include Redis or document external Redis requirement,T010,2 hours
 T021,Distribution,npm wrapper package,Low,TODO,Claude,For easier npx installation (wraps Python server),T019,2 hours
 T022,Advanced Features,Add search_flutter_docs tool,Medium,TODO,Claude,Search across multiple sources when direct URL fails,T005,3 hours
 T023,Advanced Features,Flutter cookbook integration,Medium,TODO,Claude,Scrape and process Flutter cookbook examples,T004,4 hours
@@ -38,7 +38,7 @@ T036,Core Development,Implement on-demand ingestion,Critical,TODO,Claude,Queue s
 T037,Documentation Processing,Build Dart code parser,High,TODO,Claude,Extract doc comments / class signatures / method signatures from source,T036,8 hours
 T038,Advanced Features,Public status page,Medium,TODO,Claude,Show which packages are indexed / being processed / can be requested,T036,3 hours
 T039,Marketing & Launch,Define success metrics,High,TODO,Claude,GitHub stars / daily active users / packages indexed / cache hit rate,,1 hour
-T040,Testing & QA,Create integration tests,Medium,TODO,Claude,Test full flow: request -> fetch -> process -> cache -> retrieve,T010,3 hours
+T040,Testing & QA,Create integration tests,Medium,DONE,Claude,Test full flow: request -> fetch -> process -> cache -> retrieve,T010,3 hours
 T041,Marketing & Launch,Create developer testimonial system,High,TODO,You,Google Form for collecting specific problem-solving stories,T014,1 hour
 T042,Marketing & Launch,Build showcase page,High,TODO,Claude,Curated examples of complex queries the tool handles perfectly,T014,2 hours
 T043,Marketing & Launch,Design 'Powered by @flutter_mcp' badge,Medium,TODO,Claude,SVG badge for users to add to their projects/READMEs,,1 hour
