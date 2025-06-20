@@ -199,6 +199,38 @@ To enable Flutter MCP specifically for your Flutter project:
 }
 ```
 
+**Troubleshooting:** If you get `spawn flutter-mcp ENOENT` error, use one of these configurations:
+
+<details>
+<summary>Using full path (if installed locally)</summary>
+
+```json
+{
+  "mcpServers": {
+    "flutter-mcp": {
+      "command": "/path/to/flutter-docs-mcp/venv/bin/flutter-mcp",
+      "args": ["start"]
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary>Using Python module (if installed with pip)</summary>
+
+```json
+{
+  "mcpServers": {
+    "flutter-mcp": {
+      "command": "python3",
+      "args": ["-m", "flutter_mcp", "start"]
+    }
+  }
+}
+```
+</details>
+
 2. Run Claude Code in your project directory:
 ```bash
 cd your-flutter-project
@@ -475,6 +507,64 @@ docker run -d -p 8000:8000 --name flutter-mcp ghcr.io/flutter-mcp/flutter-mcp:la
 # Check logs
 docker logs -f flutter-mcp
 ```
+
+</details>
+
+## 🛠️ Troubleshooting
+
+<details>
+<summary><strong>Error: spawn flutter-mcp ENOENT</strong></summary>
+
+This error means the system cannot find the `flutter-mcp` command. Solutions:
+
+1. **Use full path in `.mcp.json`:**
+```json
+{
+  "mcpServers": {
+    "flutter-mcp": {
+      "command": "/path/to/flutter-docs-mcp/venv/bin/flutter-mcp",
+      "args": ["start"]
+    }
+  }
+}
+```
+
+2. **Use Python module directly:**
+```json
+{
+  "mcpServers": {
+    "flutter-mcp": {
+      "command": "python3",
+      "args": ["-m", "flutter_mcp", "start"]
+    }
+  }
+}
+```
+
+3. **Install globally:**
+```bash
+pip install flutter-mcp-server
+# Then use the original config
+```
+
+</details>
+
+<details>
+<summary><strong>MCP server failed to start</strong></summary>
+
+1. Check if Python 3.10+ is installed: `python3 --version`
+2. Verify installation: `python3 -m flutter_mcp --version`
+3. Check logs in Claude Code for specific errors
+4. Try running manually: `flutter-mcp serve` to see error messages
+
+</details>
+
+<details>
+<summary><strong>Documentation not found errors</strong></summary>
+
+- Some very new packages might not have documentation yet
+- Private packages are not supported
+- Try using the package name exactly as it appears on pub.dev
 
 </details>
 
