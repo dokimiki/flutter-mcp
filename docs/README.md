@@ -100,6 +100,22 @@ docker-compose up
 </details>
 
 <details>
+<summary><strong>📦 NPM/npx (Node.js wrapper)</strong></summary>
+
+```bash
+# Run directly with npx (no install needed)
+npx @flutter-mcp/server
+
+# Or install globally
+npm install -g @flutter-mcp/server
+flutter-mcp
+```
+
+The npm wrapper automatically handles Python installation checks.
+
+</details>
+
+<details>
 <summary><strong>🎯 Single Executable (Coming Soon)</strong></summary>
 
 ```bash
@@ -131,6 +147,20 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
     "flutter-mcp": {
       "command": "flutter-mcp",
       "args": ["start"],
+      "env": {}
+    }
+  }
+}
+```
+
+Or if using npx (no Python required):
+
+```json
+{
+  "mcpServers": {
+    "flutter-mcp": {
+      "command": "npx",
+      "args": ["@flutter-mcp/server", "--stdio"],
       "env": {}
     }
   }

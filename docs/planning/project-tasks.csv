@@ -19,8 +19,8 @@ T017,Community Engagement,Set up GitHub repository,Critical,DONE,You + Claude,Cl
 T018,Community Engagement,Create Discord/Slack presence,Medium,TODO,You,Join Flutter Discord / be active before launch,,Ongoing
 T019,Distribution,Package for PyPI,High,DONE,Claude,Create pyproject.toml with proper metadata and dependencies,T010,1 hour
 T020,Distribution,Create Docker image,Medium,DONE,Claude,Include Redis or document external Redis requirement,T010,2 hours
-T021,Distribution,npm wrapper package,Low,TODO,Claude,For easier npx installation (wraps Python server),T019,2 hours
-T022,Advanced Features,Add search_flutter_docs tool,Medium,TODO,Claude,Search across multiple sources when direct URL fails,T005,3 hours
+T021,Distribution,npm wrapper package,Low,DONE,Claude,For easier npx installation (wraps Python server),T019,2 hours
+T022,Advanced Features,Add search_flutter_docs tool,Medium,DONE,Claude,Search across multiple sources when direct URL fails,T005,3 hours
 T023,Advanced Features,Flutter cookbook integration,Medium,TODO,Claude,Scrape and process Flutter cookbook examples,T004,4 hours
 T024,Advanced Features,Stack Overflow integration,Low,TODO,Claude,Search Flutter-tagged questions for common issues,T022,4 hours
 T025,Advanced Features,Version-specific documentation,Low,TODO,Claude,Allow @flutter_mcp provider:5.0.0 syntax,T006,6 hours

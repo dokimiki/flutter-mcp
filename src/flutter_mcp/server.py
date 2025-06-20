@@ -57,6 +57,19 @@ class RateLimiter:
 # Global rate limiter instance
 rate_limiter = RateLimiter()
 
+# Circuit breakers for external services
+flutter_docs_circuit = CircuitBreaker(
+    failure_threshold=5,
+    recovery_timeout=60.0,
+    expected_exception=(NetworkError, httpx.HTTPStatusError)
+)
+
+pub_dev_circuit = CircuitBreaker(
+    failure_threshold=5,
+    recovery_timeout=60.0,
+    expected_exception=(NetworkError, httpx.HTTPStatusError)
+)
+
 # Cache TTL strategy (in seconds)
 CACHE_DURATIONS = {
     "flutter_api": 86400,      # 24 hours for stable APIs
@@ -294,20 +307,31 @@ async def get_flutter_docs(
 @mcp.tool()
 async def search_flutter_docs(query: str) -> Dict[str, Any]:
     """
-    Search across Flutter/Dart documentation sources.
+    Search across Flutter/Dart documentation sources with fuzzy matching.
+    
+    Searches Flutter API docs, Dart API docs, and pub.dev packages.
+    Returns top 5-10 most relevant results with brief descriptions.
     
     Args:
-        query: Search query (e.g., "Container", "material.AppBar", "dart:core.List")
+        query: Search query (e.g., "state management", "Container", "navigation", "http requests")
     
     Returns:
-        Search results with documentation content
+        Search results with relevance scores and brief descriptions
     """
     bind_contextvars(tool="search_flutter_docs", query=query)
     logger.info("searching_docs")
     
     results = []
+    query_lower = query.lower()
     
-    # Try direct URL resolution first
+    # Check cache for search results
+    cache_key = get_cache_key("search_results", query_lower)
+    cached_data = cache_manager.get(cache_key)
+    if cached_data:
+        logger.info("search_cache_hit")
+        return cached_data
+    
+    # 1. Try direct URL resolution first (exact matches)
     if url := resolve_flutter_url(query):
         logger.info("url_resolved", url=url)
         
@@ -326,26 +350,280 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
             class_name = class_match.group(1)
             doc = await get_flutter_docs(class_name, library)
             if "error" not in doc:
-                results.append(doc)
+                results.append({
+                    "type": "flutter_class",
+                    "relevance": 1.0,
+                    "title": f"{class_name} ({library})",
+                    "description": f"Flutter {library} widget/class",
+                    "url": url,
+                    "content_preview": doc.get("content", "")[:200] + "..."
+                })
     
-    # If no direct match, try common variations
-    if not results:
-        # Try as widget
-        doc = await get_flutter_docs(query, "widgets")
-        if "error" not in doc:
-            results.append(doc)
+    # 2. Check common Flutter widgets and classes
+    common_flutter_items = [
+        # State management related
+        ("StatefulWidget", "widgets", "Base class for widgets that have mutable state"),
+        ("StatelessWidget", "widgets", "Base class for widgets that don't require mutable state"),
+        ("State", "widgets", "Logic and internal state for a StatefulWidget"),
+        ("InheritedWidget", "widgets", "Base class for widgets that propagate information down the tree"),
+        ("Provider", "widgets", "A widget that provides a value to its descendants"),
         
-        # Try as material widget
-        doc = await get_flutter_docs(query, "material")
-        if "error" not in doc:
-            results.append(doc)
+        # Layout widgets
+        ("Container", "widgets", "A convenience widget that combines common painting, positioning, and sizing"),
+        ("Row", "widgets", "Displays children in a horizontal array"),
+        ("Column", "widgets", "Displays children in a vertical array"),
+        ("Stack", "widgets", "Positions children relative to the box edges"),
+        ("Scaffold", "material", "Basic material design visual layout structure"),
+        
+        # Navigation
+        ("Navigator", "widgets", "Manages a stack of Route objects"),
+        ("Route", "widgets", "An abstraction for an entry managed by a Navigator"),
+        ("MaterialPageRoute", "material", "A modal route that replaces the entire screen"),
+        
+        # Input widgets
+        ("TextField", "material", "A material design text field"),
+        ("TextFormField", "material", "A FormField that contains a TextField"),
+        ("Form", "widgets", "Container for form fields"),
+        
+        # Common material widgets
+        ("AppBar", "material", "A material design app bar"),
+        ("Card", "material", "A material design card"),
+        ("ListTile", "material", "A single fixed-height row for lists"),
+        ("IconButton", "material", "A material design icon button"),
+        ("ElevatedButton", "material", "A material design elevated button"),
+        ("FloatingActionButton", "material", "A material design floating action button"),
+        
+        # Animation
+        ("AnimatedBuilder", "widgets", "A widget that rebuilds when animation changes"),
+        ("AnimationController", "animation", "Controls an animation"),
+        ("Hero", "widgets", "Marks a child for hero animations"),
+        
+        # Async widgets
+        ("FutureBuilder", "widgets", "Builds based on interaction with a Future"),
+        ("StreamBuilder", "widgets", "Builds based on interaction with a Stream"),
+    ]
     
-    return {
-        "query": query,
-        "results": results,
-        "total": len(results),
-        "timestamp": datetime.utcnow().isoformat()
+    # Score Flutter items based on query match
+    for class_name, library, description in common_flutter_items:
+        relevance = calculate_relevance(query_lower, class_name.lower(), description.lower())
+        if relevance > 0.3:  # Threshold for inclusion
+            results.append({
+                "type": "flutter_class",
+                "relevance": relevance,
+                "title": f"{class_name} ({library})",
+                "description": description,
+                "class_name": class_name,
+                "library": library
+            })
+    
+    # 3. Check common Dart core classes
+    common_dart_items = [
+        ("List", "dart:core", "An indexable collection of objects with a length"),
+        ("Map", "dart:core", "A collection of key/value pairs"),
+        ("Set", "dart:core", "A collection of objects with no duplicate elements"),
+        ("String", "dart:core", "A sequence of UTF-16 code units"),
+        ("Future", "dart:async", "Represents a computation that completes with a value or error"),
+        ("Stream", "dart:async", "A source of asynchronous data events"),
+        ("Duration", "dart:core", "A span of time"),
+        ("DateTime", "dart:core", "An instant in time"),
+        ("RegExp", "dart:core", "A regular expression pattern"),
+        ("Iterable", "dart:core", "A collection of values that can be accessed sequentially"),
+    ]
+    
+    for class_name, library, description in common_dart_items:
+        relevance = calculate_relevance(query_lower, class_name.lower(), description.lower())
+        if relevance > 0.3:
+            results.append({
+                "type": "dart_class",
+                "relevance": relevance,
+                "title": f"{class_name} ({library})",
+                "description": description,
+                "class_name": class_name,
+                "library": library
+            })
+    
+    # 4. Search popular pub.dev packages
+    popular_packages = [
+        ("provider", "State management library that makes it easy to connect business logic to widgets"),
+        ("riverpod", "A reactive caching and data-binding framework"),
+        ("bloc", "State management library implementing the BLoC design pattern"),
+        ("get", "Open source state management, navigation and utilities"),
+        ("dio", "Powerful HTTP client for Dart with interceptors and FormData"),
+        ("http", "A composable, multi-platform, Future-based API for HTTP requests"),
+        ("shared_preferences", "Flutter plugin for reading and writing simple key-value pairs"),
+        ("sqflite", "SQLite plugin for Flutter with support for iOS, Android and MacOS"),
+        ("hive", "Lightweight and blazing fast key-value database written in pure Dart"),
+        ("firebase_core", "Flutter plugin to use Firebase Core API"),
+        ("firebase_auth", "Flutter plugin for Firebase Auth"),
+        ("firebase_database", "Flutter plugin for Firebase Realtime Database"),
+        ("cloud_firestore", "Flutter plugin for Cloud Firestore"),
+        ("flutter_bloc", "Flutter widgets that make it easy to implement BLoC design pattern"),
+        ("url_launcher", "Flutter plugin for launching URLs"),
+        ("path_provider", "Flutter plugin for getting commonly used locations on the filesystem"),
+        ("image_picker", "Flutter plugin for selecting images from image library or camera"),
+        ("connectivity_plus", "Flutter plugin for discovering network connectivity"),
+        ("permission_handler", "Permission plugin for Flutter"),
+        ("geolocator", "Flutter geolocation plugin for Android and iOS"),
+        ("google_fonts", "Flutter package to use fonts from fonts.google.com"),
+        ("cached_network_image", "Flutter library to load and cache network images"),
+        ("flutter_svg", "SVG rendering and widget library for Flutter"),
+        ("animations", "Beautiful pre-built animations for Flutter"),
+        ("go_router", "A declarative routing package for Flutter"),
+        ("auto_route", "Code generation for type-safe route navigation"),
+    ]
+    
+    for package_name, description in popular_packages:
+        relevance = calculate_relevance(query_lower, package_name.lower(), description.lower())
+        if relevance > 0.3:
+            results.append({
+                "type": "pub_package",
+                "relevance": relevance,
+                "title": f"{package_name} (pub.dev)",
+                "description": description,
+                "package_name": package_name
+            })
+    
+    # 5. Concept-based search (for queries like "state management", "navigation", etc.)
+    concepts = {
+        "state management": [
+            ("setState", "The simplest way to manage state in Flutter"),
+            ("InheritedWidget", "Share data across the widget tree"),
+            ("provider", "Popular state management package"),
+            ("riverpod", "Improved provider with compile-time safety"),
+            ("bloc", "Business Logic Component pattern"),
+            ("get", "Lightweight state management solution"),
+            ("mobx", "Reactive state management"),
+        ],
+        "navigation": [
+            ("Navigator", "Stack-based navigation in Flutter"),
+            ("go_router", "Declarative routing package"),
+            ("auto_route", "Code generation for routes"),
+            ("Named routes", "Navigation using route names"),
+            ("Deep linking", "Handle URLs in your app"),
+        ],
+        "http": [
+            ("http", "Official Dart HTTP package"),
+            ("dio", "Advanced HTTP client with interceptors"),
+            ("retrofit", "Type-safe HTTP client generator"),
+            ("chopper", "HTTP client with built-in JsonConverter"),
+        ],
+        "database": [
+            ("sqflite", "SQLite for Flutter"),
+            ("hive", "NoSQL database for Flutter"),
+            ("drift", "Reactive persistence library"),
+            ("objectbox", "Fast NoSQL database"),
+            ("shared_preferences", "Simple key-value storage"),
+        ],
+        "animation": [
+            ("AnimationController", "Control animations"),
+            ("AnimatedBuilder", "Build animations efficiently"),
+            ("Hero", "Shared element transitions"),
+            ("animations", "Pre-built animation package"),
+            ("rive", "Interactive animations"),
+            ("lottie", "After Effects animations"),
+        ],
     }
+    
+    # Check if query matches any concept
+    for concept, items in concepts.items():
+        if concept in query_lower or any(word in concept for word in query_lower.split()):
+            for item_name, item_desc in items:
+                results.append({
+                    "type": "concept",
+                    "relevance": 0.8,
+                    "title": item_name,
+                    "description": item_desc,
+                    "concept": concept
+                })
+    
+    # Sort results by relevance
+    results.sort(key=lambda x: x["relevance"], reverse=True)
+    
+    # Limit to top 10 results
+    results = results[:10]
+    
+    # Fetch actual documentation for top results if needed
+    enriched_results = []
+    for result in results:
+        if result["type"] == "flutter_class" and "class_name" in result:
+            # Only fetch full docs for top 3 Flutter classes
+            if len(enriched_results) < 3:
+                try:
+                    doc = await get_flutter_docs(result["class_name"], result["library"])
+                    if not doc.get("error"):
+                    result["documentation_available"] = True
+                    result["content_preview"] = doc.get("content", "")[:300] + "..."
+                    else:
+                        result["documentation_available"] = False
+                        result["error_info"] = doc.get("error_type", "unknown")
+                except Exception as e:
+                    logger.warning("search_enrichment_error", error=str(e), class_name=result.get("class_name"))
+                    result["documentation_available"] = False
+                    result["error_info"] = "enrichment_failed"
+        elif result["type"] == "pub_package" and "package_name" in result:
+            # Add pub.dev URL
+            result["url"] = f"https://pub.dev/packages/{result['package_name']}"
+            result["documentation_available"] = True
+        
+        enriched_results.append(result)
+    
+    # Prepare final response
+    response = {
+        "query": query,
+        "results": enriched_results,
+        "total": len(enriched_results),
+        "timestamp": datetime.utcnow().isoformat(),
+        "suggestions": generate_search_suggestions(query_lower, enriched_results)
+    }
+    
+    # Cache the search results for 1 hour
+    cache_manager.set(cache_key, response, 3600)
+    
+    return response
+
+
+def calculate_relevance(query: str, title: str, description: str) -> float:
+    """Calculate relevance score based on fuzzy matching."""
+    score = 0.0
+    
+    # Exact match in title
+    if query == title:
+        score += 1.0
+    # Partial match in title
+    elif query in title:
+        score += 0.8
+    # Word match in title
+    elif any(word in title for word in query.split()):
+        score += 0.6
+    
+    # Match in description
+    if query in description:
+        score += 0.4
+    elif any(word in description for word in query.split() if len(word) > 3):
+        score += 0.2
+    
+    # Fuzzy match using character overlap
+    title_overlap = len(set(query) & set(title)) / len(set(query) | set(title)) if title else 0
+    desc_overlap = len(set(query) & set(description)) / len(set(query) | set(description)) if description else 0
+    score += (title_overlap * 0.3 + desc_overlap * 0.1)
+    
+    return min(score, 1.0)
+
+
+def generate_search_suggestions(query: str, results: List[Dict]) -> List[str]:
+    """Generate helpful search suggestions based on query and results."""
+    suggestions = []
+    
+    if not results:
+        suggestions.append(f"Try searching for specific widget names like 'Container' or 'Scaffold'")
+        suggestions.append(f"Use package names from pub.dev like 'provider' or 'dio'")
+        suggestions.append(f"Search for concepts like 'state management' or 'navigation'")
+    elif len(results) < 3:
+        suggestions.append(f"For more results, try broader terms or related concepts")
+        if any(r["type"] == "flutter_class" for r in results):
+            suggestions.append(f"You can also search for specific libraries like 'material.AppBar'")
+    
+    return suggestions
 
 
 @mcp.tool()
@@ -742,12 +1020,21 @@ async def health_check() -> Dict[str, Any]:
         result = await get_pub_package_info("provider")
         pub_duration = int((time.time() - pub_start) * 1000)
         
-        if "error" in result:
+        if result is None:
+            checks["pub_dev"] = {
+                "status": "timeout",
+                "target": "provider package",
+                "duration_ms": pub_duration,
+                "error": "Health check timed out after 10 seconds"
+            }
+            overall_status = "degraded" if overall_status == "ok" else overall_status
+        elif result.get("error"):
             checks["pub_dev"] = {
                 "status": "failed",
                 "target": "provider package",
                 "duration_ms": pub_duration,
-                "error": result["error"]
+                "error": result.get("message", "Unknown error"),
+                "error_type": result.get("error_type", "unknown")
             }
             overall_status = "degraded" if overall_status == "ok" else overall_status
         else:
