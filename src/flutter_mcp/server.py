@@ -1421,6 +1421,8 @@ def get_health_message(status: str) -> str:
 
 def main():
     """Main entry point for the Flutter MCP server"""
+    import os
+    
     # When running from CLI, the header is already printed
     # Only log when not running from CLI (e.g., direct execution)
     if not hasattr(sys, '_flutter_mcp_cli'):
@@ -1433,8 +1435,24 @@ def main():
     except Exception as e:
         logger.warning("cache_initialization_warning", error=str(e))
     
-    # Run the MCP server
-    mcp.run()
+    # Get transport configuration from environment
+    transport = os.environ.get('MCP_TRANSPORT', 'stdio')
+    host = os.environ.get('MCP_HOST', '127.0.0.1')
+    port = int(os.environ.get('MCP_PORT', '8000'))
+    
+    # Run the MCP server with appropriate transport
+    if transport == 'stdio':
+        mcp.run()
+    elif transport == 'sse':
+        logger.info("starting_sse_transport", host=host, port=port)
+        mcp.run(transport='sse', sse_params={'host': host, 'port': port})
+    elif transport == 'http':
+        logger.info("starting_http_transport", host=host, port=port)
+        # For HTTP transport, we need to use the uvicorn server
+        import uvicorn
+        # FastMCP creates an ASGI app when using HTTP transport
+        app = mcp.get_asgi_app()
+        uvicorn.run(app, host=host, port=port, log_level="error")
 
 
 if __name__ == "__main__":

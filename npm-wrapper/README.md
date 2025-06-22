@@ -16,12 +16,19 @@ npx @flutter-mcp/server
 
 ### Run the server
 ```bash
-npx @flutter-mcp/server
+npx @flutter-mcp/server start
 ```
 
-### Use with Claude Desktop
+### Use with different transports
 ```bash
-npx @flutter-mcp/server --stdio
+# STDIO transport (default - for Claude Desktop)
+npx @flutter-mcp/server start
+
+# HTTP transport (for MCP SuperAssistant)
+npx @flutter-mcp/server start --transport http --port 8000
+
+# SSE transport
+npx @flutter-mcp/server start --transport sse --port 8080
 ```
 
 Then add to your `claude_desktop_config.json`:
@@ -30,7 +37,7 @@ Then add to your `claude_desktop_config.json`:
   "mcpServers": {
     "flutter-mcp": {
       "command": "npx",
-      "args": ["@flutter-mcp/server", "--stdio"]
+      "args": ["@flutter-mcp/server", "start"]
     }
   }
 }
@@ -56,7 +63,7 @@ This wrapper:
 
 ## Documentation
 
-For full documentation, visit: https://github.com/yourusername/flutter-mcp-server
+For full documentation, visit: https://github.com/flutter-mcp/flutter-mcp
 
 ## License
 

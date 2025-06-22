@@ -45,6 +45,26 @@ def main():
         version=f'%(prog)s {__version__}'
     )
     
+    parser.add_argument(
+        '--transport',
+        choices=['stdio', 'sse', 'http'],
+        default='stdio',
+        help='Transport protocol to use (default: stdio)'
+    )
+    
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=8000,
+        help='Port to listen on for HTTP/SSE transport (default: 8000)'
+    )
+    
+    parser.add_argument(
+        '--host',
+        default='127.0.0.1',
+        help='Host to bind to for HTTP/SSE transport (default: 127.0.0.1)'
+    )
+    
     args = parser.parse_args()
     
     # Handle commands
@@ -92,7 +112,15 @@ def main():
         if args.cache_dir:
             console.print(f"[dim]💾 Cache directory: {args.cache_dir}[/dim]")
         
-        console.print("[yellow]⚡ Server running - connect your AI assistant[/yellow]")
+        # Show transport-specific information
+        if args.transport == 'stdio':
+            console.print("[yellow]⚡ Server running via STDIO - connect your AI assistant[/yellow]")
+        elif args.transport in ['sse', 'http']:
+            console.print(f"[yellow]🌐 Server running on {args.transport.upper()} transport[/yellow]")
+            console.print(f"[yellow]📡 Listening on http://{args.host}:{args.port}[/yellow]")
+            if args.transport == 'sse':
+                console.print(f"[dim]   SSE endpoint: http://{args.host}:{args.port}/sse[/dim]")
+            
         console.print("[yellow]⚡ Use Ctrl+C to stop the server[/yellow]\n")
         
         # Set environment variables
@@ -100,6 +128,11 @@ def main():
             os.environ['CACHE_DIR'] = args.cache_dir
         if args.debug:
             os.environ['DEBUG'] = '1'
+        
+        # Set transport configuration
+        os.environ['MCP_TRANSPORT'] = args.transport
+        os.environ['MCP_PORT'] = str(args.port)
+        os.environ['MCP_HOST'] = args.host
         
         # Set flag to indicate we're running from CLI
         sys._flutter_mcp_cli = True

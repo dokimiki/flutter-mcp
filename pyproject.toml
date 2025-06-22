@@ -27,6 +27,7 @@ dependencies = [
     "platformdirs>=4.0.0",
     "rich>=13.10.0",
     "structlog>=25.4.0",
+    "uvicorn>=0.34.0",
 ]
 
 [project.urls]

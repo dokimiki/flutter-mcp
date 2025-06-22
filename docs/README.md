@@ -252,6 +252,25 @@ In Settings → MCP Servers, add:
 </details>
 
 <details>
+<summary><strong>MCP SuperAssistant</strong></summary>
+
+MCP SuperAssistant requires HTTP transport. Configure it with:
+
+1. Start the server with HTTP transport:
+```bash
+flutter-mcp start --transport http --port 8000
+```
+
+2. In MCP SuperAssistant, add a new server:
+   - **Name**: Flutter MCP
+   - **URL**: `http://localhost:8000`
+   - **Type**: HTTP MCP Server
+
+3. The server will now be available in your MCP SuperAssistant client.
+
+</details>
+
+<details>
 <summary><strong>VS Code + Continue</strong></summary>
 
 In your `.continuerc.json`:
@@ -288,9 +307,25 @@ flutter-mcp start --daemon
 
 # Check status
 flutter-mcp status
+
+# Run with HTTP transport (for MCP SuperAssistant)
+flutter-mcp start --transport http --port 8000
+
+# Run with SSE transport
+flutter-mcp start --transport sse --port 8080
+
+# Custom host binding
+flutter-mcp start --transport http --host 0.0.0.0 --port 3000
 ```
 
-Note: When configured in Claude Desktop, the server starts automatically.
+**Transport Options:**
+- `--transport stdio` (default) - For Claude Desktop and most MCP clients
+- `--transport http` - For HTTP-based clients like MCP SuperAssistant
+- `--transport sse` - For Server-Sent Events based clients
+- `--port PORT` - Port for HTTP/SSE transport (default: 8000)
+- `--host HOST` - Host to bind to (default: 127.0.0.1)
+
+Note: When configured in Claude Desktop, the server starts automatically using STDIO transport.
 
 </details>
 
@@ -559,6 +594,42 @@ pip install flutter-mcp-server
 - Try using the package name exactly as it appears on pub.dev
 
 </details>
+
+<details>
+<summary><strong>Cannot connect from MCP client</strong></summary>
+
+Different MCP clients require different transport protocols:
+
+1. **Claude Desktop**: Uses STDIO transport (default)
+   - No port/URL needed
+   - Configured via `claude_desktop_config.json`
+
+2. **MCP SuperAssistant**: Requires HTTP transport
+   - Start with: `flutter-mcp start --transport http --port 8000`
+   - Connect to: `http://localhost:8000`
+
+3. **Custom clients**: May need SSE transport
+   - Start with: `flutter-mcp start --transport sse --port 8080`
+   - SSE endpoint: `http://localhost:8080/sse`
+
+If connection fails:
+- Verify the correct transport mode for your client
+- Check if the port is already in use
+- Try binding to all interfaces: `--host 0.0.0.0`
+
+</details>
+
+## 📱 Client Configurations
+
+Need help configuring your MCP client? We have detailed guides for:
+- Claude Desktop
+- MCP SuperAssistant  
+- Claude Code
+- VS Code + Continue
+- Custom HTTP/SSE clients
+- Docker configurations
+
+**[→ View all client configuration examples](docs/CLIENT-CONFIGURATIONS.md)**
 
 ## 🤝 Contributing
 
