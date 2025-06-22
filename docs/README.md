@@ -79,7 +79,7 @@ Install directly from GitHub:
 
 ```bash
 # Install from GitHub
-pip install git+https://github.com/flutter-mcp/flutter-mcp.git
+pip install git+https://github.com/adamsmaka/flutter-mcp.git
 
 # Run the server
 flutter-mcp start
@@ -96,7 +96,7 @@ That's it! No Redis, no configuration, no complexity. The server is now running 
 
 ```bash
 # Clone the repository
-git clone https://github.com/flutter-mcp/flutter-mcp.git
+git clone https://github.com/adamsmaka/flutter-mcp.git
 cd flutter-mcp
 
 # Create virtual environment
@@ -131,7 +131,7 @@ NPM package will be available once published to npm registry.
 
 ```bash
 # Download for your platform
-curl -L https://github.com/flutter-mcp/releases/latest/flutter-mcp-macos -o flutter-mcp
+curl -L https://github.com/adamsmaka/flutter-mcp/releases/latest/flutter-mcp-macos -o flutter-mcp
 chmod +x flutter-mcp
 ./flutter-mcp
 ```
@@ -191,7 +191,7 @@ Restart Claude Desktop after saving.
 Claude Code automatically manages MCP servers. Install the package:
 
 ```bash
-pip install git+https://github.com/flutter-mcp/flutter-mcp.git
+pip install git+https://github.com/adamsmaka/flutter-mcp.git
 ```
 
 #### Option 2: Per-Project Configuration (Recommended for Flutter Projects)
@@ -201,7 +201,7 @@ To enable Flutter MCP specifically for your Flutter project:
 1. First, install Flutter MCP:
 ```bash
 # Clone and install locally
-git clone https://github.com/flutter-mcp/flutter-mcp.git
+git clone https://github.com/adamsmaka/flutter-mcp.git
 cd flutter-mcp
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -583,7 +583,7 @@ This error means the system cannot find the `flutter-mcp` command. Solutions:
 
 3. **Install from GitHub:**
 ```bash
-pip install git+https://github.com/flutter-mcp/flutter-mcp.git
+pip install git+https://github.com/adamsmaka/flutter-mcp.git
 # Then use the original config
 ```
 
