@@ -73,45 +73,56 @@ final userProvider = FutureProvider.autoDispose
 
 ## 🚀 Quick Start
 
-### Installation (One Command!)
+### Installation
+
+Install directly from GitHub:
 
 ```bash
-# Install and run
-pip install flutter-mcp-server
+# Install from GitHub
+pip install git+https://github.com/flutter-mcp/flutter-mcp.git
+
+# Run the server
 flutter-mcp start
 ```
 
 That's it! No Redis, no configuration, no complexity. The server is now running with built-in caching.
 
+> **📢 For MCP SuperAssistant Users**: Use `flutter-mcp start --transport http --port 8000` to enable HTTP transport!
+
 ### Alternative Options
 
 <details>
-<summary><strong>🐳 Docker (Zero Dependencies)</strong></summary>
+<summary><strong>🔧 Install from Source</strong></summary>
 
 ```bash
-# Run with Docker
-docker run -p 8000:8000 ghcr.io/flutter-mcp/flutter-mcp:latest
+# Clone the repository
+git clone https://github.com/flutter-mcp/flutter-mcp.git
+cd flutter-mcp
 
-# Or use Docker Compose
-cd flutter-docs-mcp
-docker-compose up
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
+pip install -e .
+
+# Run the server
+flutter-mcp start
 ```
 
 </details>
 
 <details>
-<summary><strong>📦 NPM/npx (Node.js wrapper)</strong></summary>
+<summary><strong>🐳 Docker (Coming Soon)</strong></summary>
 
-```bash
-# Run directly with npx (no install needed)
-npx @flutter-mcp/server
+Docker images will be available once the project is published to Docker Hub/ghcr.io.
 
-# Or install globally
-npm install -g @flutter-mcp/server
-flutter-mcp
-```
+</details>
 
-The npm wrapper automatically handles Python installation checks.
+<details>
+<summary><strong>📦 NPM/npx (Coming Soon)</strong></summary>
+
+NPM package will be available once published to npm registry.
 
 </details>
 
@@ -153,19 +164,21 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Or if using npx (no Python required):
+Or install from source:
 
 ```json
 {
   "mcpServers": {
     "flutter-mcp": {
-      "command": "npx",
-      "args": ["@flutter-mcp/server", "--stdio"],
+      "command": "/path/to/flutter-mcp/venv/bin/flutter-mcp",
+      "args": ["start"],
       "env": {}
     }
   }
 }
 ```
+
+Replace `/path/to/flutter-mcp` with your actual installation path.
 
 Restart Claude Desktop after saving.
 
@@ -174,11 +187,11 @@ Restart Claude Desktop after saving.
 <details>
 <summary><strong>Claude Code (claude.ai/code)</strong></summary>
 
-#### Option 1: Global Installation (All Projects)
-Claude Code automatically manages MCP servers. Just install the package:
+#### Option 1: Install from GitHub
+Claude Code automatically manages MCP servers. Install the package:
 
 ```bash
-pip install flutter-mcp-server
+pip install git+https://github.com/flutter-mcp/flutter-mcp.git
 ```
 
 #### Option 2: Per-Project Configuration (Recommended for Flutter Projects)
@@ -568,9 +581,9 @@ This error means the system cannot find the `flutter-mcp` command. Solutions:
 }
 ```
 
-3. **Install globally:**
+3. **Install from GitHub:**
 ```bash
-pip install flutter-mcp-server
+pip install git+https://github.com/flutter-mcp/flutter-mcp.git
 # Then use the original config
 ```
 
@@ -683,6 +696,7 @@ MIT © 2024 Flutter MCP Contributors
 - **[Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)** - The most popular MCP implementation (14k+ stars)
 - **[FastMCP](https://github.com/modelcontextprotocol/fastmcp)** - High-level Python framework for MCP servers
 - **SQLite** - Built-in caching with zero configuration
+- **Installation** - Currently available via GitHub (PyPI/npm packages coming soon)
 - **BeautifulSoup** - Robust HTML parsing
 - **httpx** - Modern async HTTP client
 
