@@ -1,10 +1,10 @@
 {
-  "name": "@flutter-mcp/server",
+  "name": "flutter-mcp",
   "version": "0.1.0",
   "description": "NPM wrapper for Flutter MCP Server - Real-time Flutter/Dart documentation for AI assistants",
   "main": "index.js",
   "bin": {
-    "flutter-mcp": "./bin/flutter-mcp.js"
+    "flutter-mcp": "bin/flutter-mcp.js"
   },
   "scripts": {
     "test": "echo \"No tests for wrapper\"",
@@ -24,12 +24,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/flutter-mcp/flutter-mcp.git"
+    "url": "git+https://github.com/flutter-mcp/flutter-mcp.git"
   },
   "bugs": {
     "url": "https://github.com/flutter-mcp/flutter-mcp/issues"
   },
   "homepage": "https://github.com/flutter-mcp/flutter-mcp#readme",
+  "preferGlobal": true,
   "engines": {
     "node": ">=16.0.0"
   },

@@ -1,51 +1,56 @@
-# @flutter-mcp/server
+# flutter-mcp
 
-NPM wrapper for Flutter MCP Server - Real-time Flutter/Dart documentation for AI assistants.
+Stop hallucinated Flutter code. Get real docs, instantly.
 
-This package provides an easy way to install and run the Flutter MCP Server without needing to manage Python dependencies directly.
+Flutter MCP provides AI coding assistants with real-time access to Flutter/Dart documentation, eliminating outdated or incorrect API suggestions.
 
-## Installation
-
-You don't need to install this package globally. Just use npx:
+## Quick Start
 
 ```bash
-npx @flutter-mcp/server
+# One-time usage (no installation)
+npx flutter-mcp
+
+# Or install globally
+npm install -g flutter-mcp
+flutter-mcp
 ```
 
-## Usage
+## Claude Desktop Setup
 
-### Run the server
-```bash
-npx @flutter-mcp/server start
-```
+Add to your `claude_desktop_config.json`:
 
-### Use with different transports
-```bash
-# STDIO transport (default - for Claude Desktop)
-npx @flutter-mcp/server start
-
-# HTTP transport (for MCP SuperAssistant)
-npx @flutter-mcp/server start --transport http --port 8000
-
-# SSE transport
-npx @flutter-mcp/server start --transport sse --port 8080
-```
-
-Then add to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "flutter-mcp": {
+    "flutter-docs": {
       "command": "npx",
-      "args": ["@flutter-mcp/server", "start"]
+      "args": ["flutter-mcp"]
     }
   }
 }
 ```
 
-### Install Python package only
+That's it! No configuration needed.
+
+## Features
+
+✅ **Real-time documentation** - Always up-to-date Flutter/Dart APIs  
+✅ **500+ pre-indexed widgets** - Instant access to common Flutter components  
+✅ **Smart search** - Fuzzy matching finds what you need  
+✅ **Pub.dev integration** - Package docs and examples included  
+✅ **Zero config** - Works out of the box  
+
+## Advanced Usage
+
 ```bash
-npx @flutter-mcp/server --install
+# HTTP mode for web clients
+flutter-mcp --http --port 3000
+
+# SSE mode for streaming
+flutter-mcp --sse --port 3000
+
+# Update Python backend
+flutter-mcp --install
 ```
 
 ## Requirements

@@ -14,25 +14,36 @@ console.log(`
 Thank you for installing Flutter MCP Server!
 
 🚀 Quick Start:
-   npx @flutter-mcp/server
+   flutter-mcp                    # If installed globally
+   npx flutter-mcp                # One-time usage
 
 📚 Documentation:
-   https://github.com/yourusername/flutter-mcp-server
+   https://github.com/flutter-mcp/flutter-mcp
 
 💡 Usage with Claude Desktop:
    Add this to your claude_desktop_config.json:
    
    {
      "mcpServers": {
-       "flutter-mcp": {
+       "flutter-docs": {
          "command": "npx",
-         "args": ["@flutter-mcp/server", "--stdio"]
+         "args": ["flutter-mcp"]
+       }
+     }
+   }
+
+   Or if installed globally:
+   
+   {
+     "mcpServers": {
+       "flutter-docs": {
+         "command": "flutter-mcp"
        }
      }
    }
 
 🐛 Issues or questions?
-   https://github.com/yourusername/flutter-mcp-server/issues
+   https://github.com/flutter-mcp/flutter-mcp/issues
 
 Happy coding! 🎉
 `);
