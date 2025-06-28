@@ -4,7 +4,7 @@
 import asyncio
 import json
 import re
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime
 import time
 
@@ -62,6 +62,10 @@ from .error_handling import (
     with_retry, safe_http_get, format_error_response,
     CircuitBreaker
 )
+# Import version parser
+from .version_parser import VersionParser, VersionResolver, ParsedMention
+# Import truncation utilities
+from .truncation import truncate_flutter_docs, create_truncator
 
 # Initialize cache manager
 cache_manager = get_cache()
@@ -87,6 +91,283 @@ class RateLimiter:
 
 # Global rate limiter instance
 rate_limiter = RateLimiter()
+
+
+# ============================================================================
+# Helper Functions for Tool Consolidation
+# ============================================================================
+
+def resolve_identifier(identifier: str) -> Tuple[str, str, Optional[str]]:
+    """
+    Resolve an identifier to determine its type and clean form.
+    
+    Args:
+        identifier: The identifier to resolve (e.g., "Container", "material.AppBar", 
+                   "dart:async.Future", "provider", "dio:^5.0.0")
+    
+    Returns:
+        Tuple of (type, clean_id, library) where:
+        - type: "flutter_class", "dart_class", "pub_package", or "unknown"
+        - clean_id: Cleaned identifier without prefixes or version constraints
+        - library: Library name for classes, None for packages
+    """
+    # Check for version constraint (indicates package)
+    if ':' in identifier and not identifier.startswith('dart:'):
+        # It's a package with version constraint
+        package_name = identifier.split(':')[0]
+        return ("pub_package", package_name, None)
+    
+    # Check for Dart API pattern (dart:library.Class)
+    if identifier.startswith('dart:'):
+        match = re.match(r'dart:(\w+)\.(\w+)', identifier)
+        if match:
+            library = f"dart:{match.group(1)}"
+            class_name = match.group(2)
+            return ("dart_class", class_name, library)
+        else:
+            # Just dart:library without class
+            return ("dart_class", identifier, None)
+    
+    # Check for Flutter library.class pattern
+    flutter_libs = ['widgets', 'material', 'cupertino', 'painting', 'animation', 
+                    'rendering', 'services', 'gestures', 'foundation']
+    for lib in flutter_libs:
+        if identifier.startswith(f"{lib}."):
+            class_name = identifier.split('.', 1)[1]
+            return ("flutter_class", class_name, lib)
+    
+    # Check if it's a known Flutter widget (common ones)
+    common_widgets = ['Container', 'Row', 'Column', 'Text', 'Scaffold', 'AppBar',
+                      'ListView', 'GridView', 'Stack', 'Card', 'IconButton']
+    if identifier in common_widgets:
+        return ("flutter_class", identifier, "widgets")
+    
+    # Check if it looks like a package name (lowercase, may contain underscores)
+    if identifier.islower() or '_' in identifier:
+        return ("pub_package", identifier, None)
+    
+    # Default to unknown
+    return ("unknown", identifier, None)
+
+
+def filter_by_topic(content: str, topic: str, doc_type: str) -> str:
+    """
+    Extract specific sections from documentation based on topic.
+    
+    Args:
+        content: Full documentation content
+        topic: Topic to filter by (e.g., "constructors", "methods", "properties", 
+                "examples", "dependencies", "usage")
+        doc_type: Type of documentation ("flutter_class", "dart_class", "pub_package")
+    
+    Returns:
+        Filtered content containing only the requested topic
+    """
+    if not content:
+        return "No content available"
+    
+    topic_lower = topic.lower()
+    
+    if doc_type in ["flutter_class", "dart_class"]:
+        # For class documentation, extract specific sections
+        lines = content.split('\n')
+        in_section = False
+        section_content = []
+        section_headers = {
+            "constructors": ["## Constructors", "### Constructors"],
+            "methods": ["## Methods", "### Methods"],
+            "properties": ["## Properties", "### Properties"],
+            "examples": ["## Code Examples", "### Examples", "## Examples"],
+            "description": ["## Description", "### Description"],
+        }
+        
+        if topic_lower in section_headers:
+            headers = section_headers[topic_lower]
+            for i, line in enumerate(lines):
+                if any(header in line for header in headers):
+                    in_section = True
+                    section_content.append(line)
+                elif in_section and line.startswith('##'):
+                    # Reached next major section
+                    break
+                elif in_section:
+                    section_content.append(line)
+            
+            if section_content:
+                return '\n'.join(section_content)
+            else:
+                return f"No {topic} section found in documentation"
+        else:
+            return f"Unknown topic '{topic}' for class documentation"
+    
+    elif doc_type == "pub_package":
+        # For package documentation, different sections
+        if topic_lower == "dependencies":
+            # Extract dependencies from the content
+            deps_match = re.search(r'"dependencies":\s*\[(.*?)\]', content, re.DOTALL)
+            if deps_match:
+                deps = deps_match.group(1)
+                return f"Dependencies: {deps}"
+            return "No dependencies information found"
+        
+        elif topic_lower == "usage":
+            # Try to extract usage/getting started section from README
+            if "readme" in content.lower():
+                # Look for usage patterns in README
+                patterns = [r'## Usage.*?(?=##|\Z)', r'## Getting Started.*?(?=##|\Z)',
+                           r'## Quick Start.*?(?=##|\Z)', r'## Installation.*?(?=##|\Z)']
+                for pattern in patterns:
+                    match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+                    if match:
+                        return match.group(0).strip()
+            return "No usage information found"
+        
+        elif topic_lower == "examples":
+            # Extract code examples from README
+            code_blocks = re.findall(r'```(?:dart|flutter)?\n(.*?)\n```', content, re.DOTALL)
+            if code_blocks:
+                examples = []
+                for i, code in enumerate(code_blocks[:5]):  # Limit to 5 examples
+                    examples.append(f"Example {i+1}:\n```dart\n{code}\n```")
+                return '\n\n'.join(examples)
+            return "No code examples found"
+    
+    # Default: return full content if topic not recognized
+    return content
+
+
+def to_unified_id(doc_type: str, identifier: str, library: str = None) -> str:
+    """
+    Convert documentation reference to unified ID format.
+    
+    Args:
+        doc_type: Type of documentation ("flutter_class", "dart_class", "pub_package")
+        identifier: The identifier (class name or package name)
+        library: Optional library name for classes
+    
+    Returns:
+        Unified ID string (e.g., "flutter:material.AppBar", "dart:async.Future", "package:dio")
+    """
+    if doc_type == "flutter_class":
+        if library:
+            return f"flutter:{library}.{identifier}"
+        else:
+            return f"flutter:widgets.{identifier}"  # Default to widgets
+    elif doc_type == "dart_class":
+        if library:
+            return f"{library}.{identifier}"
+        else:
+            return f"dart:core.{identifier}"  # Default to core
+    elif doc_type == "pub_package":
+        return f"package:{identifier}"
+    else:
+        return identifier
+
+
+def from_unified_id(unified_id: str) -> Tuple[str, str, Optional[str]]:
+    """
+    Parse unified ID format back to components.
+    
+    Args:
+        unified_id: Unified ID string (e.g., "flutter:material.AppBar")
+    
+    Returns:
+        Tuple of (type, identifier, library)
+    """
+    if unified_id.startswith("flutter:"):
+        parts = unified_id[8:].split('.', 1)  # Remove "flutter:" prefix
+        if len(parts) == 2:
+            return ("flutter_class", parts[1], parts[0])
+        else:
+            return ("flutter_class", parts[0], "widgets")
+    
+    elif unified_id.startswith("dart:"):
+        match = re.match(r'(dart:\w+)\.(\w+)', unified_id)
+        if match:
+            return ("dart_class", match.group(2), match.group(1))
+        else:
+            return ("dart_class", unified_id, None)
+    
+    elif unified_id.startswith("package:"):
+        return ("pub_package", unified_id[8:], None)
+    
+    else:
+        return ("unknown", unified_id, None)
+
+
+def estimate_doc_size(content: str) -> str:
+    """
+    Estimate documentation size category based on content length.
+    
+    Args:
+        content: Documentation content
+    
+    Returns:
+        Size category: "small", "medium", or "large"
+    """
+    if not content:
+        return "small"
+    
+    # Rough token estimation (1 token ≈ 4 characters)
+    estimated_tokens = len(content) / 4
+    
+    if estimated_tokens < 1000:
+        return "small"
+    elif estimated_tokens < 4000:
+        return "medium"
+    else:
+        return "large"
+
+
+def rank_results(results: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
+    """
+    Rank search results based on relevance to query.
+    
+    Args:
+        results: List of search results
+        query: Original search query
+    
+    Returns:
+        Sorted list of results with updated relevance scores
+    """
+    query_lower = query.lower()
+    query_words = set(query_lower.split())
+    
+    for result in results:
+        # Start with existing relevance score if present
+        score = result.get("relevance", 0.5)
+        
+        # Boost for exact title match
+        title = result.get("title", "").lower()
+        if query_lower == title:
+            score += 0.5
+        elif query_lower in title:
+            score += 0.3
+        
+        # Boost for word matches in title
+        title_words = set(title.split())
+        word_overlap = len(query_words & title_words) / len(query_words) if query_words else 0
+        score += word_overlap * 0.2
+        
+        # Consider description matches
+        description = result.get("description", "").lower()
+        if query_lower in description:
+            score += 0.1
+        
+        # Boost for type preferences
+        if "state" in query_lower and result.get("type") == "concept":
+            score += 0.2
+        elif "package" in query_lower and result.get("type") == "pub_package":
+            score += 0.2
+        elif any(word in query_lower for word in ["widget", "class"]) and result.get("type") == "flutter_class":
+            score += 0.2
+        
+        # Cap score at 1.0
+        result["relevance"] = min(score, 1.0)
+    
+    # Sort by relevance score (descending)
+    return sorted(results, key=lambda x: x.get("relevance", 0), reverse=True)
+
 
 # Circuit breakers for external services
 flutter_docs_circuit = CircuitBreaker(
@@ -114,6 +395,8 @@ CACHE_DURATIONS = {
 def get_cache_key(doc_type: str, identifier: str, version: str = None) -> str:
     """Generate cache keys for different documentation types"""
     if version:
+        # Normalize version string for cache key
+        version = version.replace(' ', '_').replace('>=', 'gte').replace('<=', 'lte').replace('^', 'caret')
         return f"{doc_type}:{identifier}:{version}"
     return f"{doc_type}:{identifier}"
 
@@ -207,8 +490,8 @@ def extract_code_examples(soup: BeautifulSoup) -> str:
     return "\n".join(result)
 
 
-async def process_documentation(html: str, class_name: str) -> str:
-    """Context7-style documentation processing pipeline"""
+async def process_documentation(html: str, class_name: str, max_tokens: int = None) -> str:
+    """Context7-style documentation processing pipeline with smart truncation"""
     soup = BeautifulSoup(html, 'html.parser')
     
     # Remove navigation, scripts, styles, etc.
@@ -239,6 +522,15 @@ async def process_documentation(html: str, class_name: str) -> str:
 ## Code Examples
 {extract_code_examples(soup)}
 """
+    
+    # 3. Truncate if needed
+    if max_tokens:
+        markdown = truncate_flutter_docs(
+            markdown,
+            class_name,
+            max_tokens=max_tokens,
+            strategy="balanced"
+        )
     
     return markdown
 
@@ -275,23 +567,60 @@ def resolve_flutter_url(query: str) -> Optional[str]:
     return None
 
 
+
+
 @mcp.tool()
 async def get_flutter_docs(
     class_name: str, 
-    library: str = "widgets"
+    library: str = "widgets",
+    max_tokens: int = None
 ) -> Dict[str, Any]:
     """
-    Get Flutter class documentation on-demand.
+    Get Flutter class documentation on-demand with optional smart truncation.
+    
+    **DEPRECATED**: This tool is deprecated. Please use flutter_docs() instead.
+    The new tool provides better query resolution and unified interface.
     
     Args:
         class_name: Name of the Flutter class (e.g., "Container", "Scaffold")
         library: Flutter library (e.g., "widgets", "material", "cupertino")
+        max_tokens: Optional maximum token limit for truncation (e.g., 4000, 8000)
     
     Returns:
         Dictionary with documentation content or error message
     """
     bind_contextvars(tool="get_flutter_docs", class_name=class_name, library=library)
+    logger.warning("deprecated_tool_usage", tool="get_flutter_docs", replacement="flutter_docs")
     
+    # Call the new flutter_docs tool
+    identifier = f"{library}.{class_name}" if library != "widgets" else class_name
+    result = await flutter_docs(identifier, max_tokens=max_tokens)
+    
+    # Transform back to old format
+    if result.get("error"):
+        return {
+            "error": result["error"],
+            "suggestion": result.get("suggestion", "")
+        }
+    else:
+        return {
+            "source": result.get("source", "live"),
+            "class": result.get("class", class_name),
+            "library": result.get("library", library),
+            "content": result.get("content", ""),
+            "fetched_at": datetime.utcnow().isoformat(),
+            "truncated": result.get("truncated", False)
+        }
+
+
+async def _get_flutter_docs_impl(
+    class_name: str, 
+    library: str = "widgets",
+    max_tokens: int = None
+) -> Dict[str, Any]:
+    """
+    Internal implementation of get_flutter_docs functionality.
+    """
     # Check cache first
     cache_key = get_cache_key("flutter_api", f"{library}:{class_name}")
     
@@ -325,8 +654,8 @@ async def get_flutter_docs(
             )
             response.raise_for_status()
             
-            # Process HTML - Context7 style pipeline
-            content = await process_documentation(response.text, class_name)
+            # Process HTML - Context7 style pipeline with truncation
+            content = await process_documentation(response.text, class_name, max_tokens)
             
             # Cache the result
             result = {
@@ -334,7 +663,8 @@ async def get_flutter_docs(
                 "class": class_name,
                 "library": library,
                 "content": content,
-                "fetched_at": datetime.utcnow().isoformat()
+                "fetched_at": datetime.utcnow().isoformat(),
+                "truncated": max_tokens is not None
             }
             cache_manager.set(cache_key, result, CACHE_DURATIONS["flutter_api"])
             
@@ -360,6 +690,9 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
     """
     Search across Flutter/Dart documentation sources with fuzzy matching.
     
+    **DEPRECATED**: This tool is deprecated. Please use flutter_search() instead.
+    The new tool provides better filtering and more structured results.
+    
     Searches Flutter API docs, Dart API docs, and pub.dev packages.
     Returns top 5-10 most relevant results with brief descriptions.
     
@@ -370,6 +703,29 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
         Search results with relevance scores and brief descriptions
     """
     bind_contextvars(tool="search_flutter_docs", query=query)
+    logger.warning("deprecated_tool_usage", tool="search_flutter_docs", replacement="flutter_search")
+    
+    # Call new flutter_search tool
+    result = await flutter_search(query, limit=10)
+    
+    # Transform back to old format
+    return {
+        "query": result["query"],
+        "results": result["results"],
+        "total": result.get("total_results", result.get("returned_results", 0)),
+        "timestamp": result.get("timestamp", datetime.utcnow().isoformat()),
+        "suggestions": result.get("suggestions", [])
+    }
+
+
+async def _search_flutter_docs_impl(
+    query: str,
+    limit: int = 10,
+    types: List[str] = None
+) -> Dict[str, Any]:
+    """
+    Internal implementation of search functionality.
+    """
     logger.info("searching_docs")
     
     results = []
@@ -399,7 +755,7 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
         class_match = re.search(r'/([^/]+)-class\.html$', url)
         if class_match:
             class_name = class_match.group(1)
-            doc = await get_flutter_docs(class_name, library)
+            doc = await _get_flutter_docs_impl(class_name, library)
             if "error" not in doc:
                 results.append({
                     "type": "flutter_class",
@@ -843,11 +1199,27 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
                     "concept": concept
                 })
     
+    # Apply type filtering if specified
+    if types:
+        filtered_results = []
+        for result in results:
+            result_type = result.get("type", "")
+            # Map result types to filter types
+            if "flutter" in types and result_type == "flutter_class":
+                filtered_results.append(result)
+            elif "dart" in types and result_type == "dart_class":
+                filtered_results.append(result)
+            elif "package" in types and result_type == "pub_package":
+                filtered_results.append(result)
+            elif "concept" in types and result_type == "concept":
+                filtered_results.append(result)
+        results = filtered_results
+    
     # Sort results by relevance
     results.sort(key=lambda x: x["relevance"], reverse=True)
     
-    # Limit to top 10 results
-    results = results[:10]
+    # Apply limit
+    results = results[:limit]
     
     # Fetch actual documentation for top results if needed
     enriched_results = []
@@ -856,7 +1228,7 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
             # Only fetch full docs for top 3 Flutter classes
             if len(enriched_results) < 3:
                 try:
-                    doc = await get_flutter_docs(result["class_name"], result["library"])
+                    doc = await _get_flutter_docs_impl(result["class_name"], result["library"])
                     if not doc.get("error"):
                         result["documentation_available"] = True
                         result["content_preview"] = doc.get("content", "")[:300] + "..."
@@ -934,12 +1306,452 @@ def generate_search_suggestions(query: str, results: List[Dict]) -> List[str]:
 
 
 @mcp.tool()
+async def flutter_docs(
+    identifier: str,
+    topic: Optional[str] = None,
+    max_tokens: int = 10000
+) -> Dict[str, Any]:
+    """
+    Unified tool to get Flutter/Dart documentation with smart identifier resolution.
+    
+    Automatically detects the type of identifier and fetches appropriate documentation.
+    Supports Flutter classes, Dart classes, and pub.dev packages.
+    
+    Args:
+        identifier: The identifier to look up. Examples:
+                   - "Container" (Flutter widget)
+                   - "material.AppBar" (library-qualified Flutter class)
+                   - "dart:async.Future" (Dart API)
+                   - "provider" (pub.dev package)
+                   - "pub:dio" (explicit pub.dev package)
+                   - "flutter:Container" (explicit Flutter class)
+        topic: Optional topic filter. For classes: "constructors", "methods", 
+               "properties", "examples". For packages: "getting-started", 
+               "examples", "api", "installation"
+        max_tokens: Maximum tokens for response (default 10000)
+    
+    Returns:
+        Dictionary with documentation content, type, and metadata
+    """
+    bind_contextvars(tool="flutter_docs", identifier=identifier, topic=topic)
+    logger.info("resolving_identifier", identifier=identifier)
+    
+    # Parse identifier to determine type
+    identifier_lower = identifier.lower()
+    doc_type = None
+    library = None
+    class_name = None
+    package_name = None
+    
+    # Check for explicit prefixes
+    if identifier.startswith("pub:"):
+        doc_type = "pub_package"
+        package_name = identifier[4:]
+    elif identifier.startswith("flutter:"):
+        doc_type = "flutter_class"
+        class_name = identifier[8:]
+        library = "widgets"  # Default to widgets
+    elif identifier.startswith("dart:"):
+        doc_type = "dart_class"
+        # Parse dart:library.Class format
+        parts = identifier.split(".")
+        if len(parts) == 2:
+            library = parts[0]
+            class_name = parts[1]
+        else:
+            class_name = identifier[5:]
+            library = "dart:core"
+    elif "." in identifier:
+        # Library-qualified name (e.g., material.AppBar)
+        parts = identifier.split(".", 1)
+        library = parts[0]
+        class_name = parts[1]
+        
+        if library.startswith("dart:"):
+            doc_type = "dart_class"
+        else:
+            doc_type = "flutter_class"
+    else:
+        # Auto-detect type by trying different sources
+        # First check if it's a known Flutter class
+        flutter_libs = ["widgets", "material", "cupertino", "painting", "animation", 
+                       "rendering", "services", "gestures", "foundation"]
+        
+        # Try to find in common Flutter widgets
+        for lib in flutter_libs:
+            test_url = f"https://api.flutter.dev/flutter/{lib}/{identifier}-class.html"
+            if identifier.lower() in ["container", "scaffold", "appbar", "column", "row", 
+                                    "text", "button", "listview", "gridview", "stack"]:
+                doc_type = "flutter_class"
+                class_name = identifier
+                library = "widgets" if identifier.lower() in ["container", "column", "row", "text", "stack"] else "material"
+                break
+        
+        if not doc_type:
+            # Could be a package or unknown Flutter class
+            # We'll try both and see what works
+            doc_type = "auto"
+            class_name = identifier
+            package_name = identifier
+    
+    # Based on detected type, fetch documentation
+    result = {
+        "identifier": identifier,
+        "type": doc_type,
+        "topic": topic,
+        "max_tokens": max_tokens
+    }
+    
+    if doc_type == "flutter_class" or (doc_type == "auto" and class_name):
+        # Try Flutter documentation first
+        flutter_doc = await get_flutter_docs(class_name, library or "widgets", max_tokens=None)
+        
+        if "error" not in flutter_doc:
+            # Successfully found Flutter documentation
+            content = flutter_doc.get("content", "")
+            
+            # Apply topic filtering if requested
+            if topic:
+                content = filter_documentation_by_topic(content, topic, "flutter_class")
+            
+            # Apply token truncation
+            if max_tokens:
+                content = truncate_flutter_docs(content, class_name, max_tokens, strategy="balanced")
+            
+            result.update({
+                "type": "flutter_class",
+                "class": class_name,
+                "library": flutter_doc.get("library"),
+                "content": content,
+                "source": flutter_doc.get("source"),
+                "truncated": max_tokens is not None or topic is not None
+            })
+            return result
+        elif doc_type != "auto":
+            # Explicit Flutter class not found
+            return {
+                "identifier": identifier,
+                "type": "flutter_class",
+                "error": flutter_doc.get("error"),
+                "suggestion": flutter_doc.get("suggestion")
+            }
+    
+    if doc_type == "dart_class":
+        # Try Dart documentation
+        dart_doc = await get_flutter_docs(class_name, library, max_tokens=None)
+        
+        if "error" not in dart_doc:
+            content = dart_doc.get("content", "")
+            
+            # Apply topic filtering if requested
+            if topic:
+                content = filter_documentation_by_topic(content, topic, "dart_class")
+            
+            # Apply token truncation
+            if max_tokens:
+                content = truncate_flutter_docs(content, class_name, max_tokens, strategy="balanced")
+            
+            result.update({
+                "type": "dart_class",
+                "class": class_name,
+                "library": library,
+                "content": content,
+                "source": dart_doc.get("source"),
+                "truncated": max_tokens is not None or topic is not None
+            })
+            return result
+        else:
+            return {
+                "identifier": identifier,
+                "type": "dart_class",
+                "error": dart_doc.get("error"),
+                "suggestion": "Check the class name and library. Example: dart:async.Future"
+            }
+    
+    if doc_type == "pub_package" or doc_type == "auto":
+        # Try pub.dev package
+        package_doc = await _get_pub_package_info_impl(package_name)
+        
+        if "error" not in package_doc:
+            # Successfully found package
+            # Format content based on topic
+            if topic:
+                content = format_package_content_by_topic(package_doc, topic)
+            else:
+                content = format_package_content(package_doc)
+            
+            # Apply token truncation
+            if max_tokens:
+                truncator = create_truncator(max_tokens)
+                content = truncator.truncate(content)
+            
+            result.update({
+                "type": "pub_package",
+                "package": package_name,
+                "version": package_doc.get("version"),
+                "content": content,
+                "source": package_doc.get("source"),
+                "metadata": {
+                    "description": package_doc.get("description"),
+                    "homepage": package_doc.get("homepage"),
+                    "repository": package_doc.get("repository"),
+                    "likes": package_doc.get("likes"),
+                    "pub_points": package_doc.get("pub_points"),
+                    "platforms": package_doc.get("platforms")
+                },
+                "truncated": max_tokens is not None or topic is not None
+            })
+            return result
+        elif doc_type == "pub_package":
+            # Explicit package not found
+            return {
+                "identifier": identifier,
+                "type": "pub_package",
+                "error": package_doc.get("error"),
+                "suggestion": "Check the package name on pub.dev"
+            }
+    
+    # If auto-detection failed to find anything
+    if doc_type == "auto":
+        # Try search as last resort
+        search_results = await search_flutter_docs(identifier)
+        if search_results.get("results"):
+            top_result = search_results["results"][0]
+            return {
+                "identifier": identifier,
+                "type": "search_suggestion",
+                "error": f"Could not find exact match for '{identifier}'",
+                "suggestion": f"Did you mean '{top_result['title']}'?",
+                "search_results": search_results["results"][:3]
+            }
+        else:
+            return {
+                "identifier": identifier,
+                "type": "not_found",
+                "error": f"No documentation found for '{identifier}'",
+                "suggestion": "Try using explicit prefixes like 'pub:', 'flutter:', or 'dart:'"
+            }
+    
+    # Should not reach here
+    return {
+        "identifier": identifier,
+        "type": "error",
+        "error": "Failed to resolve identifier"
+    }
+
+
+def filter_documentation_by_topic(content: str, topic: str, doc_type: str) -> str:
+    """Filter documentation content by topic"""
+    topic_lower = topic.lower()
+    
+    if doc_type in ["flutter_class", "dart_class"]:
+        # Class documentation topics
+        lines = content.split('\n')
+        filtered_lines = []
+        current_section = None
+        include_section = False
+        
+        for line in lines:
+            # Detect section headers
+            if line.startswith('## '):
+                section_name = line[3:].lower()
+                current_section = section_name
+                
+                # Determine if we should include this section
+                if topic_lower == "constructors" and "constructor" in section_name:
+                    include_section = True
+                elif topic_lower == "methods" and "method" in section_name:
+                    include_section = True
+                elif topic_lower == "properties" and "propert" in section_name:
+                    include_section = True
+                elif topic_lower == "examples" and ("example" in section_name or "code" in section_name):
+                    include_section = True
+                else:
+                    include_section = False
+            
+            # Always include the class name and description
+            if line.startswith('# ') or (current_section == "description" and not line.startswith('## ')):
+                filtered_lines.append(line)
+            elif include_section:
+                filtered_lines.append(line)
+        
+        return '\n'.join(filtered_lines)
+    
+    return content
+
+
+def format_package_content(package_doc: Dict[str, Any]) -> str:
+    """Format package documentation into readable content"""
+    content = []
+    
+    # Header
+    content.append(f"# {package_doc['name']} v{package_doc['version']}")
+    content.append("")
+    
+    # Description
+    content.append("## Description")
+    content.append(package_doc.get('description', 'No description available'))
+    content.append("")
+    
+    # Metadata
+    content.append("## Package Information")
+    content.append(f"- **Version**: {package_doc['version']}")
+    content.append(f"- **Published**: {package_doc.get('updated', 'Unknown')}")
+    content.append(f"- **Publisher**: {package_doc.get('publisher', 'Unknown')}")
+    content.append(f"- **Platforms**: {', '.join(package_doc.get('platforms', []))}")
+    content.append(f"- **Likes**: {package_doc.get('likes', 0)}")
+    content.append(f"- **Pub Points**: {package_doc.get('pub_points', 0)}")
+    content.append(f"- **Popularity**: {package_doc.get('popularity', 0)}")
+    content.append("")
+    
+    # Links
+    if package_doc.get('homepage') or package_doc.get('repository'):
+        content.append("## Links")
+        if package_doc.get('homepage'):
+            content.append(f"- **Homepage**: {package_doc['homepage']}")
+        if package_doc.get('repository'):
+            content.append(f"- **Repository**: {package_doc['repository']}")
+        if package_doc.get('documentation'):
+            content.append(f"- **Documentation**: {package_doc['documentation']}")
+        content.append("")
+    
+    # Dependencies
+    if package_doc.get('dependencies'):
+        content.append("## Dependencies")
+        for dep in package_doc['dependencies']:
+            content.append(f"- {dep}")
+        content.append("")
+    
+    # Environment
+    if package_doc.get('environment'):
+        content.append("## Environment")
+        for key, value in package_doc['environment'].items():
+            content.append(f"- **{key}**: {value}")
+        content.append("")
+    
+    # README
+    if package_doc.get('readme'):
+        content.append("## README")
+        content.append(package_doc['readme'])
+    
+    return '\n'.join(content)
+
+
+def format_package_content_by_topic(package_doc: Dict[str, Any], topic: str) -> str:
+    """Format package documentation filtered by topic"""
+    topic_lower = topic.lower()
+    content = []
+    
+    # Always include header
+    content.append(f"# {package_doc['name']} v{package_doc['version']}")
+    content.append("")
+    
+    if topic_lower == "installation":
+        content.append("## Installation")
+        content.append("")
+        content.append("Add this to your package's `pubspec.yaml` file:")
+        content.append("")
+        content.append("```yaml")
+        content.append("dependencies:")
+        content.append(f"  {package_doc['name']}: ^{package_doc['version']}")
+        content.append("```")
+        content.append("")
+        content.append("Then run:")
+        content.append("```bash")
+        content.append("flutter pub get")
+        content.append("```")
+        
+        # Include environment requirements
+        if package_doc.get('environment'):
+            content.append("")
+            content.append("### Requirements")
+            for key, value in package_doc['environment'].items():
+                content.append(f"- **{key}**: {value}")
+                
+    elif topic_lower == "getting-started":
+        content.append("## Getting Started")
+        content.append("")
+        content.append(package_doc.get('description', 'No description available'))
+        content.append("")
+        
+        # Extract getting started section from README if available
+        if package_doc.get('readme'):
+            readme_lower = package_doc['readme'].lower()
+            # Look for getting started section
+            start_idx = readme_lower.find("getting started")
+            if start_idx == -1:
+                start_idx = readme_lower.find("quick start")
+            if start_idx == -1:
+                start_idx = readme_lower.find("usage")
+            
+            if start_idx != -1:
+                # Extract section
+                readme_section = package_doc['readme'][start_idx:]
+                # Find next section header
+                next_section = readme_section.find("\n## ")
+                if next_section != -1:
+                    readme_section = readme_section[:next_section]
+                content.append(readme_section)
+                
+    elif topic_lower == "examples":
+        content.append("## Examples")
+        content.append("")
+        
+        # Extract examples from README
+        if package_doc.get('readme'):
+            readme = package_doc['readme']
+            # Find code blocks
+            code_blocks = re.findall(r'```[\w]*\n(.*?)\n```', readme, re.DOTALL)
+            if code_blocks:
+                for i, code in enumerate(code_blocks[:5]):  # Limit to 5 examples
+                    content.append(f"### Example {i+1}")
+                    content.append("```dart")
+                    content.append(code)
+                    content.append("```")
+                    content.append("")
+            else:
+                content.append("No code examples found in documentation.")
+                
+    elif topic_lower == "api":
+        content.append("## API Reference")
+        content.append("")
+        content.append(f"Full API documentation: https://pub.dev/documentation/{package_doc['name']}/latest/")
+        content.append("")
+        
+        # Include basic package info
+        content.append("### Package Information")
+        content.append(f"- **Version**: {package_doc['version']}")
+        content.append(f"- **Platforms**: {', '.join(package_doc.get('platforms', []))}")
+        
+        if package_doc.get('dependencies'):
+            content.append("")
+            content.append("### Dependencies")
+            for dep in package_doc['dependencies']:
+                content.append(f"- {dep}")
+    
+    else:
+        # Default to full content for unknown topics
+        return format_package_content(package_doc)
+    
+    return '\n'.join(content)
+
+
+@mcp.tool()
 async def process_flutter_mentions(text: str) -> Dict[str, Any]:
     """
     Parse text for @flutter_mcp mentions and return relevant documentation.
     
+    NOTE: This tool is maintained for backward compatibility. For new integrations,
+    consider using the unified tools directly:
+    - flutter_docs: For Flutter/Dart classes and pub.dev packages
+    - flutter_search: For searching Flutter/Dart documentation
+    
     Supports patterns like:
-    - @flutter_mcp provider (pub.dev package)
+    - @flutter_mcp provider (pub.dev package - latest version)
+    - @flutter_mcp provider:^6.0.0 (specific version constraint)
+    - @flutter_mcp riverpod:2.5.1 (exact version)
+    - @flutter_mcp dio:>=5.0.0 <6.0.0 (version range)
+    - @flutter_mcp bloc:latest (latest version keyword)
     - @flutter_mcp material.AppBar (Flutter class)
     - @flutter_mcp dart:async.Future (Dart API)
     - @flutter_mcp Container (widget)
@@ -952,8 +1764,9 @@ async def process_flutter_mentions(text: str) -> Dict[str, Any]:
     """
     bind_contextvars(tool="process_flutter_mentions", text_length=len(text))
     
-    # Pattern to match @flutter_mcp mentions
-    pattern = r'@flutter_mcp\s+([a-zA-Z0-9_.:]+)'
+    # Updated pattern to match @flutter_mcp mentions with version constraints
+    # Now supports version constraints like :^6.0.0, :>=5.0.0 <6.0.0, etc.
+    pattern = r'@flutter_mcp\s+([a-zA-Z0-9_.:]+(?:\s*[<>=^]+\s*[0-9.+\-\w]+(?:\s*[<>=]+\s*[0-9.+\-\w]+)?)?)'
     mentions = re.findall(pattern, text)
     
     if not mentions:
@@ -966,90 +1779,104 @@ async def process_flutter_mentions(text: str) -> Dict[str, Any]:
     logger.info("mentions_found", count=len(mentions))
     results = []
     
+    # Process each mention using the unified flutter_docs tool
     for mention in mentions:
         logger.info("processing_mention", mention=mention)
         
-        # Determine the type of mention
-        if ':' in mention:
-            # Dart API pattern (e.g., dart:async.Future)
-            result = await search_flutter_docs(mention)
-            if result.get("results"):
-                results.append({
-                    "mention": mention,
-                    "type": "dart_api",
-                    "documentation": result["results"][0]
-                })
-            else:
-                results.append({
-                    "mention": mention,
-                    "type": "dart_api",
-                    "error": "Documentation not found"
-                })
+        try:
+            # Parse version constraints if present
+            if ':' in mention and not mention.startswith('dart:'):
+                # Package with version constraint
+                parts = mention.split(':', 1)
+                identifier = parts[0]
+                version_spec = parts[1]
                 
-        elif '.' in mention:
-            # Flutter library.class pattern (e.g., material.AppBar)
-            parts = mention.split('.')
-            if len(parts) == 2:
-                library, class_name = parts
-                if library in ["material", "widgets", "cupertino"]:
-                    # Flutter class
-                    doc = await get_flutter_docs(class_name, library)
-                    results.append({
-                        "mention": mention,
-                        "type": "flutter_class",
-                        "documentation": doc
-                    })
-                else:
-                    # Try as general search
-                    result = await search_flutter_docs(mention)
-                    if result.get("results"):
+                # For packages with version constraints, use get_pub_package_info
+                if version_spec and version_spec != 'latest':
+                    # Extract actual version if it's a simple version number
+                    version = None
+                    if re.match(r'^\d+\.\d+\.\d+$', version_spec.strip()):
+                        version = version_spec.strip()
+                    
+                    # Get package with specific version
+                    doc_result = await get_pub_package_info(identifier, version=version)
+                    
+                    if "error" not in doc_result:
                         results.append({
                             "mention": mention,
-                            "type": "flutter_search",
-                            "documentation": result["results"][0]
+                            "type": "pub_package",
+                            "documentation": doc_result
                         })
+                        if version_spec and version_spec != version:
+                            results[-1]["documentation"]["version_constraint"] = version_spec
                     else:
                         results.append({
                             "mention": mention,
-                            "type": "unknown",
-                            "error": "Documentation not found"
+                            "type": "package_version_error",
+                            "error": doc_result["error"]
                         })
+                else:
+                    # Latest version requested
+                    doc_result = await flutter_docs(identifier)
             else:
-                # Invalid format
-                results.append({
-                    "mention": mention,
-                    "type": "invalid",
-                    "error": "Invalid format for library.class pattern"
-                })
-                
-        else:
-            # Single word - could be package or widget
-            # First try as pub.dev package
-            package_info = await get_pub_package_info(mention)
+                # Use unified flutter_docs for all other cases
+                doc_result = await flutter_docs(mention)
             
-            if "error" not in package_info:
-                results.append({
-                    "mention": mention,
-                    "type": "pub_package",
-                    "documentation": package_info
-                })
+            # Process the result from flutter_docs
+            if "error" not in doc_result:
+                # Determine type based on result
+                doc_type = doc_result.get("type", "unknown")
+                
+                if doc_type == "flutter_class":
+                    results.append({
+                        "mention": mention,
+                        "type": "flutter_class",
+                        "documentation": doc_result
+                    })
+                elif doc_type == "dart_class":
+                    results.append({
+                        "mention": mention,
+                        "type": "dart_api",
+                        "documentation": doc_result
+                    })
+                elif doc_type == "pub_package":
+                    results.append({
+                        "mention": mention,
+                        "type": "pub_package",
+                        "documentation": doc_result
+                    })
+                else:
+                    # Fallback for auto-detected types
+                    results.append({
+                        "mention": mention,
+                        "type": doc_result.get("type", "flutter_widget"),
+                        "documentation": doc_result
+                    })
             else:
-                # Try as Flutter widget/class
-                search_result = await search_flutter_docs(mention)
+                # Try search as fallback
+                search_result = await flutter_search(mention, limit=1)
                 if search_result.get("results"):
                     results.append({
                         "mention": mention,
-                        "type": "flutter_widget",
+                        "type": search_result["results"][0].get("type", "flutter_widget"),
                         "documentation": search_result["results"][0]
                     })
                 else:
                     results.append({
                         "mention": mention,
                         "type": "not_found",
-                        "error": f"No documentation found for '{mention}' as package or Flutter class"
+                        "error": f"No documentation found for '{mention}'"
                     })
+                    
+        except Exception as e:
+            logger.error("mention_processing_error", mention=mention, error=str(e))
+            results.append({
+                "mention": mention,
+                "type": "error",
+                "error": f"Error processing mention: {str(e)}"
+            })
     
-    # Format results for AI context injection
+    # Format results - keep the same format for backward compatibility
     formatted_results = []
     for result in results:
         if "error" in result:
@@ -1062,23 +1889,31 @@ async def process_flutter_mentions(text: str) -> Dict[str, Any]:
             doc = result["documentation"]
             if result["type"] == "pub_package":
                 # Format package info
-                formatted_results.append({
+                formatted_result = {
                     "mention": result["mention"],
                     "type": "pub_package",
-                    "name": doc["name"],
-                    "version": doc["version"],
-                    "description": doc["description"],
-                    "documentation_url": doc["documentation"],
+                    "name": doc.get("name", ""),
+                    "version": doc.get("version", ""),
+                    "description": doc.get("description", ""),
+                    "documentation_url": doc.get("documentation", ""),
                     "dependencies": doc.get("dependencies", []),
                     "likes": doc.get("likes", 0),
                     "pub_points": doc.get("pub_points", 0)
-                })
+                }
+                
+                # Add version constraint info if present
+                if "version_constraint" in doc:
+                    formatted_result["version_constraint"] = doc["version_constraint"]
+                if "resolved_version" in doc:
+                    formatted_result["resolved_version"] = doc["resolved_version"]
+                    
+                formatted_results.append(formatted_result)
             else:
                 # Format Flutter/Dart documentation
                 formatted_results.append({
                     "mention": result["mention"],
                     "type": result["type"],
-                    "class": doc.get("class", ""),
+                    "class": doc.get("class", doc.get("identifier", "")),
                     "library": doc.get("library", ""),
                     "content": doc.get("content", ""),
                     "source": doc.get("source", "live")
@@ -1088,7 +1923,8 @@ async def process_flutter_mentions(text: str) -> Dict[str, Any]:
         "mentions_found": len(mentions),
         "unique_mentions": len(set(mentions)),
         "results": formatted_results,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "note": "This tool is maintained for backward compatibility. Consider using flutter_docs or flutter_search directly."
     }
 
 
@@ -1114,20 +1950,60 @@ def clean_readme_markdown(readme_content: str) -> str:
 
 
 @mcp.tool()
-async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
+async def get_pub_package_info(package_name: str, version: Optional[str] = None) -> Dict[str, Any]:
     """
     Get package information from pub.dev including README content.
     
+    **DEPRECATED**: This tool is deprecated. Please use flutter_docs() instead
+    with the "pub:" prefix (e.g., flutter_docs("pub:provider")).
+    
     Args:
         package_name: Name of the pub.dev package (e.g., "provider", "bloc", "dio")
+        version: Optional specific version to fetch (e.g., "6.0.5", "2.5.1")
     
     Returns:
         Package information including version, description, metadata, and README
     """
-    bind_contextvars(tool="get_pub_package_info", package=package_name)
+    bind_contextvars(tool="get_pub_package_info", package=package_name, version=version)
+    logger.warning("deprecated_tool_usage", tool="get_pub_package_info", replacement="flutter_docs")
+    
+    # Call new flutter_docs tool
+    identifier = f"pub:{package_name}"
+    if version:
+        identifier += f":{version}"
+    
+    result = await flutter_docs(identifier)
+    
+    # Transform back to old format
+    if result.get("error"):
+        return {
+            "error": result["error"]
+        }
+    else:
+        metadata = result.get("metadata", {})
+        return {
+            "source": result.get("source", "live"),
+            "name": result.get("package", package_name),
+            "version": result.get("version", "latest"),
+            "description": metadata.get("description", ""),
+            "homepage": metadata.get("homepage", ""),
+            "repository": metadata.get("repository", ""),
+            "documentation": f"https://pub.dev/packages/{package_name}",
+            "dependencies": [],  # Not included in new format
+            "readme": result.get("content", ""),
+            "pub_points": metadata.get("pub_points", 0),
+            "likes": metadata.get("likes", 0),
+            "fetched_at": datetime.utcnow().isoformat()
+        }
+
+
+async def _get_pub_package_info_impl(package_name: str, version: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Internal implementation of get_pub_package_info functionality.
+    """
     
     # Check cache first
-    cache_key = get_cache_key("pub_package", package_name)
+    cache_key = get_cache_key("pub_package", package_name, version)
     
     # Check cache
     cached_data = cache_manager.get(cache_key)
@@ -1155,15 +2031,34 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
             
             data = response.json()
             
-            # Extract relevant information
-            latest = data.get("latest", {})
-            pubspec = latest.get("pubspec", {})
-            version = latest.get("version", "unknown")
+            # If specific version requested, find it in versions list
+            if version:
+                version_data = None
+                for v in data.get("versions", []):
+                    if v.get("version") == version:
+                        version_data = v
+                        break
+                
+                if not version_data:
+                    return {
+                        "error": f"Version '{version}' not found for package '{package_name}'",
+                        "available_versions": [v.get("version") for v in data.get("versions", [])][:10]  # Show first 10
+                    }
+                
+                pubspec = version_data.get("pubspec", {})
+                actual_version = version_data.get("version", version)
+                published_date = version_data.get("published", "")
+            else:
+                # Use latest version
+                latest = data.get("latest", {})
+                pubspec = latest.get("pubspec", {})
+                actual_version = latest.get("version", "unknown")
+                published_date = latest.get("published", "")
             
             result = {
                 "source": "live",
                 "name": package_name,
-                "version": version,
+                "version": actual_version,
                 "description": pubspec.get("description", "No description available"),
                 "homepage": pubspec.get("homepage", ""),
                 "repository": pubspec.get("repository", ""),
@@ -1172,7 +2067,7 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
                 "dev_dependencies": list(pubspec.get("dev_dependencies", {}).keys()),
                 "environment": pubspec.get("environment", {}),
                 "platforms": data.get("platforms", []),
-                "updated": latest.get("published", ""),
+                "updated": published_date,
                 "publisher": data.get("publisher", ""),
                 "likes": data.get("likeCount", 0),
                 "pub_points": data.get("pubPoints", 0),
@@ -1180,7 +2075,11 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
             }
             
             # Fetch README content from package page
-            readme_url = f"https://pub.dev/packages/{package_name}"
+            # For specific versions, pub.dev uses /versions/{version} path
+            if version:
+                readme_url = f"https://pub.dev/packages/{package_name}/versions/{actual_version}"
+            else:
+                readme_url = f"https://pub.dev/packages/{package_name}"
             logger.info("fetching_readme", url=readme_url)
             
             try:
@@ -1277,12 +2176,443 @@ async def get_pub_package_info(package_name: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def health_check() -> Dict[str, Any]:
+async def flutter_search(query: str, limit: int = 10) -> Dict[str, Any]:
     """
-    Check the health status of all scrapers and services.
+    Search across multiple Flutter/Dart documentation sources with unified results.
+    
+    Searches Flutter classes, Dart classes, pub packages, and concepts in parallel.
+    Returns structured results with relevance scoring and documentation hints.
+    
+    Args:
+        query: Search query (e.g., "state management", "Container", "http")
+        limit: Maximum number of results to return (default: 10, max: 25)
     
     Returns:
-        Health status including individual scraper checks and overall status
+        Unified search results with type classification and relevance scores
+    """
+    bind_contextvars(tool="flutter_search", query=query, limit=limit)
+    logger.info("unified_search_started")
+    
+    # Validate limit
+    limit = min(max(limit, 1), 25)
+    
+    # Check cache for search results
+    cache_key = get_cache_key("unified_search", f"{query}:{limit}")
+    cached_data = cache_manager.get(cache_key)
+    if cached_data:
+        logger.info("unified_search_cache_hit")
+        return cached_data
+    
+    # Prepare search tasks for parallel execution
+    search_tasks = []
+    results = []
+    query_lower = query.lower()
+    
+    # Define search functions for parallel execution
+    async def search_flutter_classes():
+        """Search Flutter widget/class documentation"""
+        flutter_results = []
+        
+        # Check if query is a direct Flutter class reference
+        if url := resolve_flutter_url(query):
+            # Extract class and library info from resolved URL
+            library = "widgets"  # Default
+            if "flutter/material" in url:
+                library = "material"
+            elif "flutter/cupertino" in url:
+                library = "cupertino"
+            elif "flutter/animation" in url:
+                library = "animation"
+            elif "flutter/painting" in url:
+                library = "painting"
+            elif "flutter/rendering" in url:
+                library = "rendering"
+            elif "flutter/services" in url:
+                library = "services"
+            elif "flutter/gestures" in url:
+                library = "gestures"
+            elif "flutter/foundation" in url:
+                library = "foundation"
+            
+            class_match = re.search(r'/([^/]+)-class\.html$', url)
+            if class_match:
+                class_name = class_match.group(1)
+                flutter_results.append({
+                    "id": f"flutter:{library}:{class_name}",
+                    "type": "flutter_class",
+                    "relevance": 1.0,
+                    "title": class_name,
+                    "library": library,
+                    "description": f"Flutter {library} class",
+                    "doc_size": "large",
+                    "url": url
+                })
+        
+        # Search common Flutter classes
+        flutter_classes = [
+            # State management
+            ("StatefulWidget", "widgets", "Base class for widgets that have mutable state", ["state", "stateful", "widget"]),
+            ("StatelessWidget", "widgets", "Base class for widgets that don't require mutable state", ["state", "stateless", "widget"]),
+            ("State", "widgets", "Logic and internal state for a StatefulWidget", ["state", "lifecycle"]),
+            ("InheritedWidget", "widgets", "Base class for widgets that propagate information down the tree", ["inherited", "propagate", "state"]),
+            ("ValueListenableBuilder", "widgets", "Rebuilds when ValueListenable changes", ["value", "listenable", "builder", "state"]),
+            
+            # Layout widgets
+            ("Container", "widgets", "A convenience widget that combines common painting, positioning, and sizing", ["container", "box", "layout"]),
+            ("Row", "widgets", "Displays children in a horizontal array", ["row", "horizontal", "layout"]),
+            ("Column", "widgets", "Displays children in a vertical array", ["column", "vertical", "layout"]),
+            ("Stack", "widgets", "Positions children relative to the box edges", ["stack", "overlay", "position"]),
+            ("Scaffold", "material", "Basic material design visual layout structure", ["scaffold", "material", "layout", "structure"]),
+            
+            # Navigation
+            ("Navigator", "widgets", "Manages a stack of Route objects", ["navigator", "navigation", "route"]),
+            ("MaterialPageRoute", "material", "A modal route that replaces the entire screen", ["route", "navigation", "page"]),
+            
+            # Input widgets
+            ("TextField", "material", "A material design text field", ["text", "input", "field", "form"]),
+            ("GestureDetector", "widgets", "Detects gestures on widgets", ["gesture", "touch", "tap", "click"]),
+            
+            # Lists
+            ("ListView", "widgets", "Scrollable list of widgets", ["list", "scroll", "view"]),
+            ("GridView", "widgets", "Scrollable 2D array of widgets", ["grid", "scroll", "view"]),
+            
+            # Visual
+            ("AppBar", "material", "A material design app bar", ["app", "bar", "header", "material"]),
+            ("Card", "material", "A material design card", ["card", "material"]),
+            
+            # Async
+            ("FutureBuilder", "widgets", "Builds based on interaction with a Future", ["future", "async", "builder"]),
+            ("StreamBuilder", "widgets", "Builds based on interaction with a Stream", ["stream", "async", "builder"]),
+        ]
+        
+        for class_name, library, description, keywords in flutter_classes:
+            # Calculate relevance based on query match
+            relevance = 0.0
+            
+            # Direct match
+            if query_lower == class_name.lower():
+                relevance = 1.0
+            elif query_lower in class_name.lower():
+                relevance = 0.8
+            elif class_name.lower() in query_lower:
+                relevance = 0.7
+            
+            # Keyword match
+            if relevance < 0.3:
+                for keyword in keywords:
+                    if keyword in query_lower or query_lower in keyword:
+                        relevance = max(relevance, 0.5)
+                        break
+            
+            # Description match
+            if relevance < 0.3 and query_lower in description.lower():
+                relevance = 0.4
+            
+            if relevance > 0.3:
+                flutter_results.append({
+                    "id": f"flutter:{library}:{class_name}",
+                    "type": "flutter_class",
+                    "relevance": relevance,
+                    "title": class_name,
+                    "library": library,
+                    "description": description,
+                    "doc_size": "large"
+                })
+        
+        return flutter_results
+    
+    async def search_dart_classes():
+        """Search Dart core library documentation"""
+        dart_results = []
+        
+        dart_classes = [
+            ("List", "dart:core", "An indexable collection of objects with a length", ["list", "array", "collection"]),
+            ("Map", "dart:core", "A collection of key/value pairs", ["map", "dictionary", "hash", "key", "value"]),
+            ("Set", "dart:core", "A collection of objects with no duplicate elements", ["set", "unique", "collection"]),
+            ("String", "dart:core", "A sequence of UTF-16 code units", ["string", "text"]),
+            ("Future", "dart:async", "Represents a computation that completes with a value or error", ["future", "async", "promise"]),
+            ("Stream", "dart:async", "A source of asynchronous data events", ["stream", "async", "event"]),
+            ("Duration", "dart:core", "A span of time", ["duration", "time", "span"]),
+            ("DateTime", "dart:core", "An instant in time", ["date", "time", "datetime"]),
+            ("RegExp", "dart:core", "A regular expression pattern", ["regex", "regexp", "pattern"]),
+            ("Iterable", "dart:core", "A collection of values that can be accessed sequentially", ["iterable", "collection", "sequence"]),
+        ]
+        
+        for class_name, library, description, keywords in dart_classes:
+            relevance = 0.0
+            
+            # Direct match
+            if query_lower == class_name.lower():
+                relevance = 1.0
+            elif query_lower in class_name.lower():
+                relevance = 0.8
+            elif class_name.lower() in query_lower:
+                relevance = 0.7
+            
+            # Keyword match
+            if relevance < 0.3:
+                for keyword in keywords:
+                    if keyword in query_lower or query_lower in keyword:
+                        relevance = max(relevance, 0.5)
+                        break
+            
+            # Description match
+            if relevance < 0.3 and query_lower in description.lower():
+                relevance = 0.4
+            
+            if relevance > 0.3:
+                dart_results.append({
+                    "id": f"dart:{library.replace('dart:', '')}:{class_name}",
+                    "type": "dart_class",
+                    "relevance": relevance,
+                    "title": class_name,
+                    "library": library,
+                    "description": description,
+                    "doc_size": "medium"
+                })
+        
+        return dart_results
+    
+    async def search_pub_packages():
+        """Search pub.dev packages"""
+        package_results = []
+        
+        # Define popular packages with categories
+        packages = [
+            # State Management
+            ("provider", "State management library that makes it easy to connect business logic to widgets", ["state", "management", "provider"], "state_management"),
+            ("riverpod", "A reactive caching and data-binding framework", ["state", "management", "riverpod", "reactive"], "state_management"),
+            ("bloc", "State management library implementing the BLoC design pattern", ["state", "management", "bloc", "pattern"], "state_management"),
+            ("get", "Open source state management, navigation and utilities", ["state", "management", "get", "navigation"], "state_management"),
+            
+            # Networking
+            ("dio", "Powerful HTTP client for Dart with interceptors and FormData", ["http", "network", "dio", "api"], "networking"),
+            ("http", "A composable, multi-platform, Future-based API for HTTP requests", ["http", "network", "request"], "networking"),
+            ("retrofit", "Type-safe HTTP client generator", ["http", "network", "retrofit", "generator"], "networking"),
+            
+            # Storage
+            ("shared_preferences", "Flutter plugin for reading and writing simple key-value pairs", ["storage", "preferences", "settings"], "storage"),
+            ("sqflite", "SQLite plugin for Flutter", ["database", "sqlite", "sql", "storage"], "storage"),
+            ("hive", "Lightweight and blazing fast key-value database", ["database", "hive", "nosql", "storage"], "storage"),
+            
+            # Firebase
+            ("firebase_core", "Flutter plugin to use Firebase Core API", ["firebase", "core", "backend"], "firebase"),
+            ("firebase_auth", "Flutter plugin for Firebase Auth", ["firebase", "auth", "authentication"], "firebase"),
+            ("cloud_firestore", "Flutter plugin for Cloud Firestore", ["firebase", "firestore", "database"], "firebase"),
+            
+            # UI/UX
+            ("flutter_svg", "SVG rendering and widget library for Flutter", ["svg", "image", "vector", "ui"], "ui"),
+            ("cached_network_image", "Flutter library to load and cache network images", ["image", "cache", "network", "ui"], "ui"),
+            ("animations", "Beautiful pre-built animations for Flutter", ["animation", "transition", "ui"], "ui"),
+            
+            # Navigation
+            ("go_router", "A declarative routing package for Flutter", ["navigation", "router", "routing"], "navigation"),
+            ("auto_route", "Code generation for type-safe route navigation", ["navigation", "router", "generation"], "navigation"),
+            
+            # Platform
+            ("url_launcher", "Flutter plugin for launching URLs", ["url", "launcher", "platform"], "platform"),
+            ("path_provider", "Flutter plugin for getting commonly used locations on filesystem", ["path", "file", "platform"], "platform"),
+            ("image_picker", "Flutter plugin for selecting images", ["image", "picker", "camera", "gallery"], "platform"),
+        ]
+        
+        for package_name, description, keywords, category in packages:
+            relevance = 0.0
+            
+            # Direct match
+            if query_lower == package_name:
+                relevance = 1.0
+            elif query_lower in package_name:
+                relevance = 0.8
+            elif package_name in query_lower:
+                relevance = 0.7
+            
+            # Keyword match
+            if relevance < 0.3:
+                for keyword in keywords:
+                    if keyword in query_lower or query_lower in keyword:
+                        relevance = max(relevance, 0.6)
+                        break
+            
+            # Category match
+            if relevance < 0.3 and category in query_lower:
+                relevance = 0.5
+            
+            # Description match
+            if relevance < 0.3 and query_lower in description.lower():
+                relevance = 0.4
+            
+            if relevance > 0.3:
+                package_results.append({
+                    "id": f"pub:{package_name}",
+                    "type": "pub_package",
+                    "relevance": relevance,
+                    "title": package_name,
+                    "category": category,
+                    "description": description,
+                    "doc_size": "variable",
+                    "url": f"https://pub.dev/packages/{package_name}"
+                })
+        
+        return package_results
+    
+    async def search_concepts():
+        """Search programming concepts and patterns"""
+        concept_results = []
+        
+        concepts = {
+            "state_management": {
+                "title": "State Management in Flutter",
+                "description": "Techniques for managing application state",
+                "keywords": ["state", "management", "provider", "bloc", "riverpod"],
+                "related": ["setState", "InheritedWidget", "provider", "bloc", "riverpod", "get"]
+            },
+            "navigation": {
+                "title": "Navigation & Routing",
+                "description": "Moving between screens and managing navigation stack",
+                "keywords": ["navigation", "routing", "navigator", "route", "screen"],
+                "related": ["Navigator", "MaterialPageRoute", "go_router", "deep linking"]
+            },
+            "async_programming": {
+                "title": "Asynchronous Programming",
+                "description": "Working with Futures, Streams, and async operations",
+                "keywords": ["async", "future", "stream", "await", "asynchronous"],
+                "related": ["Future", "Stream", "FutureBuilder", "StreamBuilder", "async/await"]
+            },
+            "http_networking": {
+                "title": "HTTP & Networking",
+                "description": "Making HTTP requests and handling network operations",
+                "keywords": ["http", "network", "api", "rest", "request"],
+                "related": ["http", "dio", "retrofit", "REST API", "JSON"]
+            },
+            "database_storage": {
+                "title": "Database & Storage",
+                "description": "Persisting data locally using various storage solutions",
+                "keywords": ["database", "storage", "sqlite", "persistence", "cache"],
+                "related": ["sqflite", "hive", "shared_preferences", "drift", "objectbox"]
+            },
+            "animation": {
+                "title": "Animations in Flutter",
+                "description": "Creating smooth animations and transitions",
+                "keywords": ["animation", "transition", "animate", "motion"],
+                "related": ["AnimationController", "AnimatedBuilder", "Hero", "Curves"]
+            },
+            "testing": {
+                "title": "Testing Flutter Apps",
+                "description": "Unit, widget, and integration testing strategies",
+                "keywords": ["test", "testing", "unit", "widget", "integration"],
+                "related": ["flutter_test", "mockito", "integration_test", "golden tests"]
+            },
+            "architecture": {
+                "title": "App Architecture Patterns",
+                "description": "Organizing code with architectural patterns",
+                "keywords": ["architecture", "pattern", "mvvm", "mvc", "clean"],
+                "related": ["BLoC Pattern", "MVVM", "Clean Architecture", "Repository Pattern"]
+            },
+            "performance": {
+                "title": "Performance Optimization",
+                "description": "Improving app performance and reducing jank",
+                "keywords": ["performance", "optimization", "speed", "jank", "profile"],
+                "related": ["Performance Profiling", "Widget Inspector", "const constructors"]
+            },
+            "platform_integration": {
+                "title": "Platform Integration",
+                "description": "Integrating with native platform features",
+                "keywords": ["platform", "native", "channel", "integration", "plugin"],
+                "related": ["Platform Channels", "Method Channel", "Plugin Development"]
+            }
+        }
+        
+        for concept_id, concept_data in concepts.items():
+            relevance = 0.0
+            
+            # Check keywords
+            for keyword in concept_data["keywords"]:
+                if keyword in query_lower or query_lower in keyword:
+                    relevance = max(relevance, 0.7)
+                    
+            # Check title
+            if query_lower in concept_data["title"].lower():
+                relevance = max(relevance, 0.8)
+                
+            # Check description
+            if relevance < 0.3 and query_lower in concept_data["description"].lower():
+                relevance = 0.5
+            
+            if relevance > 0.3:
+                concept_results.append({
+                    "id": f"concept:{concept_id}",
+                    "type": "concept",
+                    "relevance": relevance,
+                    "title": concept_data["title"],
+                    "description": concept_data["description"],
+                    "related_items": concept_data["related"],
+                    "doc_size": "summary"
+                })
+        
+        return concept_results
+    
+    # Execute all searches in parallel
+    flutter_task = asyncio.create_task(search_flutter_classes())
+    dart_task = asyncio.create_task(search_dart_classes())
+    pub_task = asyncio.create_task(search_pub_packages())
+    concept_task = asyncio.create_task(search_concepts())
+    
+    # Wait for all searches to complete
+    flutter_results, dart_results, pub_results, concept_results = await asyncio.gather(
+        flutter_task, dart_task, pub_task, concept_task
+    )
+    
+    # Combine all results
+    all_results = flutter_results + dart_results + pub_results + concept_results
+    
+    # Sort by relevance and limit
+    all_results.sort(key=lambda x: x["relevance"], reverse=True)
+    results = all_results[:limit]
+    
+    # Add search metadata
+    response = {
+        "query": query,
+        "total_results": len(all_results),
+        "returned_results": len(results),
+        "results": results,
+        "result_types": {
+            "flutter_classes": sum(1 for r in results if r["type"] == "flutter_class"),
+            "dart_classes": sum(1 for r in results if r["type"] == "dart_class"),
+            "pub_packages": sum(1 for r in results if r["type"] == "pub_package"),
+            "concepts": sum(1 for r in results if r["type"] == "concept")
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    # Add search suggestions if results are limited
+    if len(results) < 5:
+        suggestions = []
+        if not any(r["type"] == "flutter_class" for r in results):
+            suggestions.append("Try searching for specific widget names like 'Container' or 'Scaffold'")
+        if not any(r["type"] == "pub_package" for r in results):
+            suggestions.append("Search for package names like 'provider' or 'dio'")
+        if not any(r["type"] == "concept" for r in results):
+            suggestions.append("Try broader concepts like 'state management' or 'navigation'")
+        
+        response["suggestions"] = suggestions
+    
+    # Cache the results for 1 hour
+    cache_manager.set(cache_key, response, 3600)
+    
+    logger.info("unified_search_completed", 
+                total_results=len(all_results),
+                returned_results=len(results))
+    
+    return response
+
+
+@mcp.tool()
+async def flutter_status() -> Dict[str, Any]:
+    """
+    Check the health status of all Flutter documentation services.
+    
+    Returns:
+        Health status including individual service checks and cache statistics
     """
     checks = {}
     overall_status = "ok"
@@ -1407,6 +2737,22 @@ async def health_check() -> Dict[str, Any]:
         "checks": checks,
         "message": get_health_message(overall_status)
     }
+
+
+@mcp.tool()
+async def health_check() -> Dict[str, Any]:
+    """
+    Check the health status of all scrapers and services.
+    
+    **DEPRECATED**: This tool is deprecated. Please use flutter_status() instead.
+    
+    Returns:
+        Health status including individual scraper checks and overall status
+    """
+    logger.warning("deprecated_tool_usage", tool="health_check", replacement="flutter_status")
+    
+    # Simply call the new flutter_status function
+    return await flutter_status()
 
 
 def get_health_message(status: str) -> str:
