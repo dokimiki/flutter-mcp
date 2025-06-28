@@ -46,14 +46,32 @@ class CacheManager:
     def _init_db(self) -> None:
         """Initialize the cache database."""
         with sqlite3.connect(str(self.db_path)) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS doc_cache (
-                    key TEXT PRIMARY KEY NOT NULL,
-                    value TEXT NOT NULL,
-                    created_at INTEGER NOT NULL,
-                    expires_at INTEGER NOT NULL
-                )
+            # Check if we need to migrate the schema
+            cursor = conn.execute("""
+                SELECT sql FROM sqlite_master 
+                WHERE type='table' AND name='doc_cache'
             """)
+            existing_schema = cursor.fetchone()
+            
+            if existing_schema and 'token_count' not in existing_schema[0]:
+                # Migrate existing table to add token_count column
+                logger.info("Migrating cache schema to add token_count")
+                conn.execute("""
+                    ALTER TABLE doc_cache 
+                    ADD COLUMN token_count INTEGER DEFAULT NULL
+                """)
+            else:
+                # Create new table with token_count
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS doc_cache (
+                        key TEXT PRIMARY KEY NOT NULL,
+                        value TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        expires_at INTEGER NOT NULL,
+                        token_count INTEGER DEFAULT NULL
+                    )
+                """)
+            
             # Create index for expiration queries
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_expires_at 
@@ -74,7 +92,7 @@ class CacheManager:
         
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.execute(
-                "SELECT value, expires_at FROM doc_cache WHERE key = ?",
+                "SELECT value, expires_at, token_count FROM doc_cache WHERE key = ?",
                 (key,)
             )
             row = cursor.fetchone()
@@ -82,7 +100,7 @@ class CacheManager:
             if not row:
                 return None
             
-            value, expires_at = row
+            value, expires_at, token_count = row
             
             # Check if expired
             if expires_at < current_time:
@@ -93,22 +111,31 @@ class CacheManager:
                 return None
             
             try:
-                return json.loads(value)
+                result = json.loads(value)
+                # Add token_count to the result if it exists
+                if token_count is not None:
+                    result['_cached_token_count'] = token_count
+                return result
             except json.JSONDecodeError:
                 logger.error(f"Failed to decode cache value for key: {key}")
                 return None
     
-    def set(self, key: str, value: Dict[str, Any], ttl_override: Optional[int] = None) -> None:
+    def set(self, key: str, value: Dict[str, Any], ttl_override: Optional[int] = None, token_count: Optional[int] = None) -> None:
         """Set value in cache.
         
         Args:
             key: Cache key
             value: Value to cache (must be JSON-serializable)
             ttl_override: Optional TTL override in seconds
+            token_count: Optional token count to store with the cached data
         """
         current_time = int(time.time())
         ttl = ttl_override or self.ttl_seconds
         expires_at = current_time + ttl
+        
+        # Extract token count from value if present and not provided explicitly
+        if token_count is None and '_cached_token_count' in value:
+            token_count = value.pop('_cached_token_count', None)
         
         try:
             value_json = json.dumps(value)
@@ -119,12 +146,12 @@ class CacheManager:
         with sqlite3.connect(str(self.db_path)) as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO doc_cache 
-                   (key, value, created_at, expires_at) 
-                   VALUES (?, ?, ?, ?)""",
-                (key, value_json, current_time, expires_at)
+                   (key, value, created_at, expires_at, token_count) 
+                   VALUES (?, ?, ?, ?, ?)""",
+                (key, value_json, current_time, expires_at, token_count)
             )
             conn.commit()
-            logger.debug(f"Cached key: {key} (expires in {ttl}s)")
+            logger.debug(f"Cached key: {key} (expires in {ttl}s, tokens: {token_count})")
     
     def delete(self, key: str) -> None:
         """Delete a key from cache.
@@ -176,6 +203,17 @@ class CacheManager:
                 (current_time,)
             ).fetchone()[0]
             
+            # Entries with token counts
+            with_tokens = conn.execute(
+                "SELECT COUNT(*) FROM doc_cache WHERE token_count IS NOT NULL"
+            ).fetchone()[0]
+            
+            # Total tokens cached
+            total_tokens = conn.execute(
+                "SELECT SUM(token_count) FROM doc_cache WHERE token_count IS NOT NULL AND expires_at >= ?",
+                (current_time,)
+            ).fetchone()[0] or 0
+            
             # Database size
             db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
             
@@ -183,6 +221,8 @@ class CacheManager:
                 "total_entries": total,
                 "expired_entries": expired,
                 "active_entries": total - expired,
+                "entries_with_token_counts": with_tokens,
+                "total_cached_tokens": total_tokens,
                 "database_size_bytes": db_size,
                 "database_path": str(self.db_path)
             }

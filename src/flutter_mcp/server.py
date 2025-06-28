@@ -65,11 +65,16 @@ from .error_handling import (
 # Import version parser
 from .version_parser import VersionParser, VersionResolver, ParsedMention
 # Import truncation utilities
-from .truncation import truncate_flutter_docs, create_truncator
+from .truncation import truncate_flutter_docs, create_truncator, DocumentTruncator
+# Import token management
+from .token_manager import TokenManager
 
 # Initialize cache manager
 cache_manager = get_cache()
 logger.info("cache_initialized", cache_type="sqlite", path=cache_manager.db_path)
+
+# Initialize token manager
+token_manager = TokenManager()
 
 
 class RateLimiter:
@@ -490,8 +495,16 @@ def extract_code_examples(soup: BeautifulSoup) -> str:
     return "\n".join(result)
 
 
-async def process_documentation(html: str, class_name: str, max_tokens: int = None) -> str:
-    """Context7-style documentation processing pipeline with smart truncation"""
+async def process_documentation(html: str, class_name: str, tokens: int = None) -> Dict[str, Any]:
+    """Context7-style documentation processing pipeline with smart truncation and token counting.
+    
+    Returns a dict containing:
+        - content: The processed markdown content
+        - token_count: Final token count after any truncation
+        - original_tokens: Original token count before truncation
+        - truncated: Boolean indicating if content was truncated
+        - truncation_note: Optional note about truncation
+    """
     soup = BeautifulSoup(html, 'html.parser')
     
     # Remove navigation, scripts, styles, etc.
@@ -523,16 +536,32 @@ async def process_documentation(html: str, class_name: str, max_tokens: int = No
 {extract_code_examples(soup)}
 """
     
+    # Count tokens before truncation
+    original_tokens = token_manager.count_tokens(markdown)
+    truncated = False
+    truncation_note = None
+    
     # 3. Truncate if needed
-    if max_tokens:
+    if tokens and original_tokens > tokens:
         markdown = truncate_flutter_docs(
             markdown,
             class_name,
-            max_tokens=max_tokens,
+            max_tokens=tokens,
             strategy="balanced"
         )
+        truncated = True
+        truncation_note = f"Documentation truncated from {original_tokens} to approximately {tokens} tokens"
     
-    return markdown
+    # Count final tokens
+    final_tokens = token_manager.count_tokens(markdown)
+    
+    return {
+        "content": markdown,
+        "token_count": final_tokens,
+        "original_tokens": original_tokens if truncated else final_tokens,
+        "truncated": truncated,
+        "truncation_note": truncation_note
+    }
 
 
 def resolve_flutter_url(query: str) -> Optional[str]:
@@ -573,7 +602,7 @@ def resolve_flutter_url(query: str) -> Optional[str]:
 async def get_flutter_docs(
     class_name: str, 
     library: str = "widgets",
-    max_tokens: int = None
+    tokens: int = 8000
 ) -> Dict[str, Any]:
     """
     Get Flutter class documentation on-demand with optional smart truncation.
@@ -584,7 +613,7 @@ async def get_flutter_docs(
     Args:
         class_name: Name of the Flutter class (e.g., "Container", "Scaffold")
         library: Flutter library (e.g., "widgets", "material", "cupertino")
-        max_tokens: Optional maximum token limit for truncation (e.g., 4000, 8000)
+        tokens: Maximum token limit for truncation (default: 8000, min: 500)
     
     Returns:
         Dictionary with documentation content or error message
@@ -592,9 +621,13 @@ async def get_flutter_docs(
     bind_contextvars(tool="get_flutter_docs", class_name=class_name, library=library)
     logger.warning("deprecated_tool_usage", tool="get_flutter_docs", replacement="flutter_docs")
     
+    # Validate tokens parameter
+    if tokens < 500:
+        return {"error": "tokens parameter must be at least 500"}
+    
     # Call the new flutter_docs tool
     identifier = f"{library}.{class_name}" if library != "widgets" else class_name
-    result = await flutter_docs(identifier, max_tokens=max_tokens)
+    result = await flutter_docs(identifier, max_tokens=tokens)
     
     # Transform back to old format
     if result.get("error"):
@@ -616,7 +649,7 @@ async def get_flutter_docs(
 async def _get_flutter_docs_impl(
     class_name: str, 
     library: str = "widgets",
-    max_tokens: int = None
+    tokens: int = None
 ) -> Dict[str, Any]:
     """
     Internal implementation of get_flutter_docs functionality.
@@ -655,20 +688,26 @@ async def _get_flutter_docs_impl(
             response.raise_for_status()
             
             # Process HTML - Context7 style pipeline with truncation
-            content = await process_documentation(response.text, class_name, max_tokens)
+            doc_result = await process_documentation(response.text, class_name, tokens)
             
-            # Cache the result
+            # Cache the result with token metadata
             result = {
                 "source": "live",
                 "class": class_name,
                 "library": library,
-                "content": content,
+                "content": doc_result["content"],
                 "fetched_at": datetime.utcnow().isoformat(),
-                "truncated": max_tokens is not None
+                "truncated": doc_result["truncated"],
+                "token_count": doc_result["token_count"],
+                "original_tokens": doc_result["original_tokens"],
+                "truncation_note": doc_result["truncation_note"]
             }
-            cache_manager.set(cache_key, result, CACHE_DURATIONS["flutter_api"])
+            cache_manager.set(cache_key, result, CACHE_DURATIONS["flutter_api"], token_count=doc_result["token_count"])
             
-            logger.info("docs_fetched_success", content_length=len(content))
+            logger.info("docs_fetched_success", 
+                       content_length=len(doc_result["content"]),
+                       token_count=doc_result["token_count"],
+                       truncated=doc_result["truncated"])
             return result
             
     except httpx.HTTPStatusError as e:
@@ -686,7 +725,7 @@ async def _get_flutter_docs_impl(
 
 
 @mcp.tool()
-async def search_flutter_docs(query: str) -> Dict[str, Any]:
+async def search_flutter_docs(query: str, tokens: int = 5000) -> Dict[str, Any]:
     """
     Search across Flutter/Dart documentation sources with fuzzy matching.
     
@@ -698,12 +737,17 @@ async def search_flutter_docs(query: str) -> Dict[str, Any]:
     
     Args:
         query: Search query (e.g., "state management", "Container", "navigation", "http requests")
+        tokens: Maximum token limit for response (default: 5000, min: 500)
     
     Returns:
         Search results with relevance scores and brief descriptions
     """
     bind_contextvars(tool="search_flutter_docs", query=query)
     logger.warning("deprecated_tool_usage", tool="search_flutter_docs", replacement="flutter_search")
+    
+    # Validate tokens parameter
+    if tokens < 500:
+        return {"error": "tokens parameter must be at least 500"}
     
     # Call new flutter_search tool
     result = await flutter_search(query, limit=10)
@@ -1309,7 +1353,7 @@ def generate_search_suggestions(query: str, results: List[Dict]) -> List[str]:
 async def flutter_docs(
     identifier: str,
     topic: Optional[str] = None,
-    max_tokens: int = 10000
+    tokens: int = 10000
 ) -> Dict[str, Any]:
     """
     Unified tool to get Flutter/Dart documentation with smart identifier resolution.
@@ -1328,13 +1372,17 @@ async def flutter_docs(
         topic: Optional topic filter. For classes: "constructors", "methods", 
                "properties", "examples". For packages: "getting-started", 
                "examples", "api", "installation"
-        max_tokens: Maximum tokens for response (default 10000)
+        tokens: Maximum tokens for response (default: 10000, min: 1000)
     
     Returns:
         Dictionary with documentation content, type, and metadata
     """
     bind_contextvars(tool="flutter_docs", identifier=identifier, topic=topic)
     logger.info("resolving_identifier", identifier=identifier)
+    
+    # Validate tokens parameter
+    if tokens < 1000:
+        return {"error": "tokens parameter must be at least 1000"}
     
     # Parse identifier to determine type
     identifier_lower = identifier.lower()
@@ -1399,12 +1447,12 @@ async def flutter_docs(
         "identifier": identifier,
         "type": doc_type,
         "topic": topic,
-        "max_tokens": max_tokens
+        "max_tokens": tokens
     }
     
     if doc_type == "flutter_class" or (doc_type == "auto" and class_name):
         # Try Flutter documentation first
-        flutter_doc = await get_flutter_docs(class_name, library or "widgets", max_tokens=None)
+        flutter_doc = await get_flutter_docs(class_name, library or "widgets", tokens=tokens)
         
         if "error" not in flutter_doc:
             # Successfully found Flutter documentation
@@ -1413,10 +1461,17 @@ async def flutter_docs(
             # Apply topic filtering if requested
             if topic:
                 content = filter_documentation_by_topic(content, topic, "flutter_class")
-            
-            # Apply token truncation
-            if max_tokens:
-                content = truncate_flutter_docs(content, class_name, max_tokens, strategy="balanced")
+                # Recount tokens after filtering
+                filtered_tokens = token_manager.count_tokens(content)
+                # If filtering reduced content below token limit, no need for further truncation
+                if tokens and filtered_tokens > tokens:
+                    content = truncate_flutter_docs(content, class_name, tokens, strategy="balanced")
+                    final_tokens = token_manager.count_tokens(content)
+                else:
+                    final_tokens = filtered_tokens
+            else:
+                # Use the token count from get_flutter_docs if no filtering
+                final_tokens = flutter_doc.get("token_count", token_manager.count_tokens(content))
             
             result.update({
                 "type": "flutter_class",
@@ -1424,7 +1479,10 @@ async def flutter_docs(
                 "library": flutter_doc.get("library"),
                 "content": content,
                 "source": flutter_doc.get("source"),
-                "truncated": max_tokens is not None or topic is not None
+                "truncated": flutter_doc.get("truncated", False) or topic is not None,
+                "token_count": final_tokens,
+                "original_tokens": flutter_doc.get("original_tokens", final_tokens),
+                "truncation_note": flutter_doc.get("truncation_note")
             })
             return result
         elif doc_type != "auto":
@@ -1438,7 +1496,7 @@ async def flutter_docs(
     
     if doc_type == "dart_class":
         # Try Dart documentation
-        dart_doc = await get_flutter_docs(class_name, library, max_tokens=None)
+        dart_doc = await get_flutter_docs(class_name, library, tokens=tokens)
         
         if "error" not in dart_doc:
             content = dart_doc.get("content", "")
@@ -1446,10 +1504,17 @@ async def flutter_docs(
             # Apply topic filtering if requested
             if topic:
                 content = filter_documentation_by_topic(content, topic, "dart_class")
-            
-            # Apply token truncation
-            if max_tokens:
-                content = truncate_flutter_docs(content, class_name, max_tokens, strategy="balanced")
+                # Recount tokens after filtering
+                filtered_tokens = token_manager.count_tokens(content)
+                # If filtering reduced content below token limit, no need for further truncation
+                if tokens and filtered_tokens > tokens:
+                    content = truncate_flutter_docs(content, class_name, tokens, strategy="balanced")
+                    final_tokens = token_manager.count_tokens(content)
+                else:
+                    final_tokens = filtered_tokens
+            else:
+                # Use the token count from get_flutter_docs if no filtering
+                final_tokens = dart_doc.get("token_count", token_manager.count_tokens(content))
             
             result.update({
                 "type": "dart_class",
@@ -1457,7 +1522,10 @@ async def flutter_docs(
                 "library": library,
                 "content": content,
                 "source": dart_doc.get("source"),
-                "truncated": max_tokens is not None or topic is not None
+                "truncated": dart_doc.get("truncated", False) or topic is not None,
+                "token_count": final_tokens,
+                "original_tokens": dart_doc.get("original_tokens", final_tokens),
+                "truncation_note": dart_doc.get("truncation_note")
             })
             return result
         else:
@@ -1480,10 +1548,20 @@ async def flutter_docs(
             else:
                 content = format_package_content(package_doc)
             
-            # Apply token truncation
-            if max_tokens:
-                truncator = create_truncator(max_tokens)
+            # Count original tokens
+            original_tokens = token_manager.count_tokens(content)
+            truncated = False
+            truncation_note = None
+            
+            # Apply token truncation if needed
+            if tokens and original_tokens > tokens:
+                truncator = create_truncator(tokens)
                 content = truncator.truncate(content)
+                truncated = True
+                truncation_note = f"Documentation truncated from {original_tokens} to approximately {tokens} tokens"
+            
+            # Count final tokens
+            final_tokens = token_manager.count_tokens(content)
             
             result.update({
                 "type": "pub_package",
@@ -1499,7 +1577,10 @@ async def flutter_docs(
                     "pub_points": package_doc.get("pub_points"),
                     "platforms": package_doc.get("platforms")
                 },
-                "truncated": max_tokens is not None or topic is not None
+                "truncated": truncated or topic is not None,
+                "token_count": final_tokens,
+                "original_tokens": original_tokens if truncated else final_tokens,
+                "truncation_note": truncation_note
             })
             return result
         elif doc_type == "pub_package":
@@ -1737,7 +1818,7 @@ def format_package_content_by_topic(package_doc: Dict[str, Any], topic: str) -> 
 
 
 @mcp.tool()
-async def process_flutter_mentions(text: str) -> Dict[str, Any]:
+async def process_flutter_mentions(text: str, tokens: int = 4000) -> Dict[str, Any]:
     """
     Parse text for @flutter_mcp mentions and return relevant documentation.
     
@@ -1758,11 +1839,16 @@ async def process_flutter_mentions(text: str) -> Dict[str, Any]:
     
     Args:
         text: Text containing @flutter_mcp mentions
+        tokens: Maximum token limit for each mention's documentation (default: 4000, min: 500)
     
     Returns:
         Dictionary with parsed mentions and their documentation
     """
     bind_contextvars(tool="process_flutter_mentions", text_length=len(text))
+    
+    # Validate tokens parameter
+    if tokens < 500:
+        return {"error": "tokens parameter must be at least 500"}
     
     # Updated pattern to match @flutter_mcp mentions with version constraints
     # Now supports version constraints like :^6.0.0, :>=5.0.0 <6.0.0, etc.
@@ -1817,10 +1903,10 @@ async def process_flutter_mentions(text: str) -> Dict[str, Any]:
                         })
                 else:
                     # Latest version requested
-                    doc_result = await flutter_docs(identifier)
+                    doc_result = await flutter_docs(identifier, max_tokens=tokens)
             else:
                 # Use unified flutter_docs for all other cases
-                doc_result = await flutter_docs(mention)
+                doc_result = await flutter_docs(mention, max_tokens=tokens)
             
             # Process the result from flutter_docs
             if "error" not in doc_result:
@@ -1950,7 +2036,7 @@ def clean_readme_markdown(readme_content: str) -> str:
 
 
 @mcp.tool()
-async def get_pub_package_info(package_name: str, version: Optional[str] = None) -> Dict[str, Any]:
+async def get_pub_package_info(package_name: str, version: Optional[str] = None, tokens: int = 6000) -> Dict[str, Any]:
     """
     Get package information from pub.dev including README content.
     
@@ -1960,6 +2046,7 @@ async def get_pub_package_info(package_name: str, version: Optional[str] = None)
     Args:
         package_name: Name of the pub.dev package (e.g., "provider", "bloc", "dio")
         version: Optional specific version to fetch (e.g., "6.0.5", "2.5.1")
+        tokens: Maximum token limit for response (default: 6000, min: 500)
     
     Returns:
         Package information including version, description, metadata, and README
@@ -1967,12 +2054,16 @@ async def get_pub_package_info(package_name: str, version: Optional[str] = None)
     bind_contextvars(tool="get_pub_package_info", package=package_name, version=version)
     logger.warning("deprecated_tool_usage", tool="get_pub_package_info", replacement="flutter_docs")
     
+    # Validate tokens parameter
+    if tokens < 500:
+        return {"error": "tokens parameter must be at least 500"}
+    
     # Call new flutter_docs tool
     identifier = f"pub:{package_name}"
     if version:
         identifier += f":{version}"
     
-    result = await flutter_docs(identifier)
+    result = await flutter_docs(identifier, max_tokens=tokens)
     
     # Transform back to old format
     if result.get("error"):
@@ -2176,7 +2267,7 @@ async def _get_pub_package_info_impl(package_name: str, version: Optional[str] =
 
 
 @mcp.tool()
-async def flutter_search(query: str, limit: int = 10) -> Dict[str, Any]:
+async def flutter_search(query: str, limit: int = 10, tokens: int = 5000) -> Dict[str, Any]:
     """
     Search across multiple Flutter/Dart documentation sources with unified results.
     
@@ -2186,12 +2277,17 @@ async def flutter_search(query: str, limit: int = 10) -> Dict[str, Any]:
     Args:
         query: Search query (e.g., "state management", "Container", "http")
         limit: Maximum number of results to return (default: 10, max: 25)
+        tokens: Maximum token limit for response (default: 5000, min: 500)
     
     Returns:
         Unified search results with type classification and relevance scores
     """
     bind_contextvars(tool="flutter_search", query=query, limit=limit)
     logger.info("unified_search_started")
+    
+    # Validate tokens parameter
+    if tokens < 500:
+        return {"error": "tokens parameter must be at least 500"}
     
     # Validate limit
     limit = min(max(limit, 1), 25)
