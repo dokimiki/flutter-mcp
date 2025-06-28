@@ -2887,14 +2887,11 @@ def main():
         mcp.run()
     elif transport == 'sse':
         logger.info("starting_sse_transport", host=host, port=port)
-        mcp.run(transport='sse', sse_params={'host': host, 'port': port})
+        mcp.run(transport='sse', host=host, port=port)
     elif transport == 'http':
         logger.info("starting_http_transport", host=host, port=port)
-        # For HTTP transport, we need to use the uvicorn server
-        import uvicorn
-        # FastMCP creates an ASGI app when using HTTP transport
-        app = mcp.get_asgi_app()
-        uvicorn.run(app, host=host, port=port, log_level="error")
+        # FastMCP handles HTTP transport internally
+        mcp.run(transport='http', host=host, port=port, path='/mcp')
 
 
 if __name__ == "__main__":
