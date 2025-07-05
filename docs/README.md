@@ -30,7 +30,7 @@ Stop fighting with hallucinated widgets and deprecated APIs. Flutter MCP connect
   <img src="https://github.com/flutter-mcp/flutter-mcp/assets/demo.gif" alt="Flutter MCP Demo" width="800">
 </p>
 
-**See it in action**: From `flutter-mcp start` to getting real-time Flutter documentation in 20 seconds.
+**See it in action**: From `npx flutter-mcp` to getting real-time Flutter documentation in 20 seconds.
 
 ## The Problem: Your AI is Stuck in 2021
 
@@ -93,7 +93,7 @@ flutter-mcp
 
 That's it! No Python setup, no configuration, no complexity. The server automatically installs dependencies and starts running.
 
-> **📢 For MCP SuperAssistant Users**: Use `npx flutter-mcp --http --port 8000` to enable HTTP transport!
+> **📢 For MCP SuperAssistant Users**: Use `npx flutter-mcp --transport http --port 8000` to enable HTTP transport!
 
 ### Alternative Installation Methods
 
@@ -103,14 +103,11 @@ That's it! No Python setup, no configuration, no complexity. The server automati
 If you prefer using Python directly:
 
 ```bash
-# Install from PyPI (once published)
-pip install flutter-mcp
-
-# Or install from GitHub
-pip install git+https://github.com/flutter-mcp/flutter-mcp.git
+# Install from GitHub (PyPI package coming soon)
+pip install git+https://github.com/adamsmaka/flutter-mcp.git
 
 # Run the server
-flutter-mcp start
+flutter-mcp-server start
 ```
 
 </details>
@@ -133,7 +130,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e .
 
 # Run the server
-flutter-mcp start
+flutter-mcp-server start
 ```
 
 </details>
@@ -144,11 +141,12 @@ flutter-mcp start
 For containerized deployments:
 
 ```bash
-# Run with Docker
-docker run -d -p 8000:8000 flutter-mcp/flutter-mcp
+# Docker image coming soon
+# Run with Docker (once published)
+# docker run -d -p 8000:8000 ghcr.io/adamsmaka/flutter-mcp:latest
 
-# Or use docker-compose
-docker-compose up -d
+# For now, use local development setup instead
+pip install git+https://github.com/adamsmaka/flutter-mcp.git
 ```
 
 </details>
@@ -170,7 +168,7 @@ No Python, no pip, just download and run!
 ### Requirements
 
 - **Node.js 16+** (for npm/npx)
-- Python 3.8+ is auto-detected and used by the npm package
+- Python 3.10+ is auto-detected and used by the npm package
 - That's it! Built-in SQLite caching means no external dependencies
 
 ### 2. Add to Your AI Assistant
@@ -272,7 +270,7 @@ MCP SuperAssistant requires HTTP transport. Configure it with:
 
 1. Start the server with HTTP transport:
 ```bash
-npx flutter-mcp --http --port 8000
+npx flutter-mcp --transport http --port 8000
 ```
 
 2. In MCP SuperAssistant, add a new server:
@@ -317,23 +315,23 @@ In your `.continuerc.json`:
 npx flutter-mcp
 
 # HTTP transport (for MCP SuperAssistant)
-npx flutter-mcp --http --port 8000
+npx flutter-mcp --transport http --port 8000
 
 # SSE transport
-npx flutter-mcp --sse --port 8080
+npx flutter-mcp --transport sse --port 8080
 
 # Custom host binding
-npx flutter-mcp --http --host 0.0.0.0 --port 3000
+npx flutter-mcp --transport http --host 0.0.0.0 --port 3000
 
 # If installed globally
-flutter-mcp --http --port 8000
+flutter-mcp-server --transport http --port 8000
 ```
 
 **Transport Options:**
 - Default (no flag) - STDIO for Claude Desktop and most MCP clients
-- `--http` - For HTTP-based clients like MCP SuperAssistant
-- `--sse` - For Server-Sent Events based clients
-- `--port PORT` - Port for HTTP/SSE transport (default: 3000)
+- `--transport http` - For HTTP-based clients like MCP SuperAssistant
+- `--transport sse` - For Server-Sent Events based clients
+- `--port PORT` - Port for HTTP/SSE transport (default: 8000)
 - `--host HOST` - Host to bind to (default: 127.0.0.1)
 
 Note: When configured in Claude Desktop, the server starts automatically using STDIO transport.
@@ -577,26 +575,17 @@ When you request a package, Flutter MCP extracts:
 ## 🛠️ Advanced Usage
 
 <details>
-<summary><strong>Cache and Debug Commands</strong></summary>
-
-When using the Python package directly (after `pip install flutter-mcp`):
+<summary><strong>Debug Commands</strong></summary>
 
 ```bash
-# Pre-cache common packages
-flutter-mcp cache add provider riverpod bloc dio freezed
-
-# List cached packages
-flutter-mcp cache list
-
-# Clear specific package cache
-flutter-mcp cache remove dio
-
-# Clear all cache
-flutter-mcp cache clear
-
 # Run with debug logging
 DEBUG=true npx flutter-mcp
+
+# Check server status and cache info
+flutter-mcp-server --help
 ```
+
+Note: Cache is automatically managed by the server. Cached documentation expires after 24 hours (API docs) or 12 hours (packages).
 
 </details>
 
@@ -606,8 +595,8 @@ DEBUG=true npx flutter-mcp
 For production or team use:
 
 ```bash
-# Run the server
-docker run -d -p 8000:8000 --name flutter-mcp ghcr.io/flutter-mcp/flutter-mcp:latest
+# Run the server (Docker image coming soon)
+# docker run -d -p 8000:8000 --name flutter-mcp ghcr.io/adamsmaka/flutter-mcp:latest
 
 # Check logs
 docker logs -f flutter-mcp
@@ -685,11 +674,11 @@ Different MCP clients require different transport protocols:
    - Just use: `npx flutter-mcp`
 
 2. **MCP SuperAssistant**: Requires HTTP transport
-   - Start with: `npx flutter-mcp --http --port 8000`
+   - Start with: `npx flutter-mcp --transport http --port 8000`
    - Connect to: `http://localhost:8000`
 
 3. **Custom clients**: May need SSE transport
-   - Start with: `npx flutter-mcp --sse --port 8080`
+   - Start with: `npx flutter-mcp --transport sse --port 8080`
    - SSE endpoint: `http://localhost:8080/sse`
 
 If connection fails:

@@ -62,8 +62,7 @@ from .error_handling import (
     with_retry, safe_http_get, format_error_response,
     CircuitBreaker
 )
-# Import version parser
-from .version_parser import VersionParser, VersionResolver, ParsedMention
+# Legacy version parser functionality now integrated in resolve_identifier()
 # Import truncation utilities
 from .truncation import truncate_flutter_docs, create_truncator, DocumentTruncator
 # Import token management
