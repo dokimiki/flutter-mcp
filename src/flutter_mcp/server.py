@@ -626,7 +626,7 @@ async def get_flutter_docs(
     
     # Call the new flutter_docs tool
     identifier = f"{library}.{class_name}" if library != "widgets" else class_name
-    result = await flutter_docs(identifier, max_tokens=tokens)
+    result = await flutter_docs(identifier, tokens=tokens)
     
     # Transform back to old format
     if result.get("error"):
@@ -1902,10 +1902,10 @@ async def process_flutter_mentions(text: str, tokens: int = 4000) -> Dict[str, A
                         })
                 else:
                     # Latest version requested
-                    doc_result = await flutter_docs(identifier, max_tokens=tokens)
+                    doc_result = await flutter_docs(identifier, tokens=tokens)
             else:
                 # Use unified flutter_docs for all other cases
-                doc_result = await flutter_docs(mention, max_tokens=tokens)
+                doc_result = await flutter_docs(mention, tokens=tokens)
             
             # Process the result from flutter_docs
             if "error" not in doc_result:
@@ -2062,7 +2062,7 @@ async def get_pub_package_info(package_name: str, version: Optional[str] = None,
     if version:
         identifier += f":{version}"
     
-    result = await flutter_docs(identifier, max_tokens=tokens)
+    result = await flutter_docs(identifier, tokens=tokens)
     
     # Transform back to old format
     if result.get("error"):
